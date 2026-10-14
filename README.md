@@ -70,7 +70,7 @@ About page (the final location is still to be decided).
   COOP/COEP headers needed for threads). Intel‑era cars (MCU2) may not sustain 30 fps
   at the *Sharp* size; use *Balanced* or let Automatic fall back to MJPEG. JPEG quality
   in MJPEG mode is fixed inside the adapter binaries.
-- The `customer` partition grows by about 1 MB (compressed decoder). Check the
+- The `customer` squashfs grows by about 250 KB (6.07 → 6.31 MB; xz compresses the decoder well). Check the
   partition size before flashing: `curl -s 'http://192.168.3.1/cgi-bin/index.cgi?id=logcat' |
   gunzip | grep -i customer` shows the MTD layout from `dmesg`.
 
