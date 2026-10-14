@@ -21,19 +21,18 @@ and a page reload loop on resize. Carlinkit has not shipped a fix.
   so the UI keeps the same physical size before and after the Tesla density change.
 - The CarPlay session size is requested from the browser: *Balanced* (default) matches
   the browser viewport, *Sharp* matches physical pixels (1:1 on the Tesla screen),
-  *Data saver* is 0.75×, *Device* restores the adapter's own HD/SD/Auto presets.
+  *Data saver* is 0.75×, *Low* is 0.6×, *Device* restores the adapter's own HD/SD/Auto presets.
   The session always has the viewport's aspect ratio, so nothing is cropped or stretched.
 - Picture fit (Fit / Fill / Stretch) is a user choice; touch coordinates are mapped
   through the same rule.
 
 **Smoother, lower‑latency picture**
 - MJPEG (`/video.jpg`) is consumed with a streaming `fetch` reader, decoded off the
-  main thread with `createImageBitmap`, and painted inside `requestAnimationFrame`.
-  Only the newest frame is decoded; stale frames are dropped, so latency never
-  accumulates and the TCP stream never stalls the adapter.
-- H.264 over WebSocket is used automatically when the browser provides WebCodecs
-  (worker + OffscreenCanvas + WebGL). The Tesla browser currently lacks WebCodecs, so
-  the adapter is switched to picture mode when needed instead of showing a black screen.
+  main thread with `createImageBitmap`, and painted the moment the bitmap is ready on
+  a desynchronized canvas. Only the newest frame is decoded; stale frames are dropped,
+  so latency never accumulates and the TCP stream never stalls the adapter.
+- The adapter is kept in picture mode. Its H.264 "video" mode needs WebCodecs, which
+  the Tesla browser does not provide, so that path was removed from this UI.
 - Touch moves are coalesced per animation frame; pointer events with capture.
 - A performance overlay (fps, bandwidth, decode time, dropped frames) can be toggled in
   Display settings.
@@ -61,8 +60,9 @@ About page (the final location is still to be decided).
   intermittent microphone drop‑outs are a Bluetooth stack issue inside the closed
   `gocsdk`/`libGbtsTask` binaries and cannot be fixed from the web UI.
 - True low‑bandwidth video (H.264 at a few Mbit/s instead of MJPEG) needs an H.264
-  decoder in the browser. WebCodecs is auto‑detected and used when Tesla enables it.
-  A WebAssembly fallback decoder is possible but was not added (see `docs/NOTES.md`).
+  decoder in the browser, which the Tesla browser lacks. A WebAssembly decoder is
+  possible but was not added (see `docs/NOTES.md`). JPEG quality is fixed inside the
+  adapter binaries; the levers available here are picture size and frame rate.
 
 ## Build
 
@@ -95,7 +95,6 @@ Flashing can brick the adapter; there is no A/B fallback.
 
 ```
 python3 tools/devserver.py --frames /path/to/jpegs --link-after 4        # MJPEG mock
-python3 tools/devserver.py --mode video --h264 stream.h264 --link-after 2  # H.264 mock
 ```
 
 The simulator reproduces the adapter's templating, WebSocket protocol, `/video.jpg`

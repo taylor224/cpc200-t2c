@@ -84,6 +84,12 @@ Not on the web path at all. `lylinkui` handles `LYLINK_AUDIO_START/STOP` and
 `LYLINK_RECORD_*` by routing PCM to the Goodix Bluetooth chip (A2DP to the car, HFP
 SCO from the car's microphone). `/mic_test.pcm` records a sample from that path.
 
+## Why no H.264 in the web UI
+
+Tesla pauses `<video>` elements while driving (OS level), so any decoder must paint a
+canvas. The Tesla browser has no WebCodecs, so the adapter's H.264 "video" mode cannot
+be decoded there at all; this UI keeps the adapter in picture mode (`KEY.MODE = 0`).
+
 ## WASM H.264 fallback (not implemented)
 
 The adapter encodes High profile (`avc1.64001f`, CABAC). Browser‑side software decoders

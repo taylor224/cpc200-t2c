@@ -52,13 +52,11 @@
     'disp.theme': 'Appearance', 'disp.theme_light': 'Light', 'disp.theme_dark': 'Dark', 'disp.theme_auto': 'Follow night mode',
     'disp.night': 'Night mode', 'disp.night_hint': 'Asks the iPhone to draw CarPlay in dark appearance',
     'disp.night_sched': 'Automatic night mode', 'disp.night_off': 'Off', 'disp.night_18': '18:00 – 06:00', 'disp.night_19': '19:00 – 07:00',
-    'disp.res': 'Picture size', 'disp.res_sharp': 'Sharp', 'disp.res_balanced': 'Balanced', 'disp.res_saver': 'Data saver',
+    'disp.res': 'Picture size', 'disp.res_sharp': 'Sharp', 'disp.res_balanced': 'Balanced', 'disp.res_saver': 'Data saver', 'disp.res_low': 'Low',
     'disp.res_device': 'Device', 'disp.res_hd': 'HD', 'disp.res_sd': 'SD', 'disp.res_auto': 'Auto',
-    'disp.res_hint': 'Sharp renders 1:1 on the Tesla screen but uses more Wi‑Fi bandwidth. Balanced matches the browser size. Device uses the adapter\'s own presets.',
+    'disp.res_hint': 'Sharp renders 1:1 on the Tesla screen but uses the most Wi‑Fi bandwidth. Balanced matches the browser size. Data saver and Low reduce the picture size (and bandwidth) further. Device uses the adapter\'s own presets.',
     'disp.ui_scale': 'CarPlay UI size', 'disp.ui_small': 'Small', 'disp.ui_normal': 'Normal', 'disp.ui_large': 'Large',
     'disp.fps': 'Frame rate', 'disp.fps_standard': 'Standard', 'disp.fps_smooth': 'Smooth',
-    'disp.mode': 'Video transport', 'disp.mode_picture': 'Picture', 'disp.mode_video': 'Video',
-    'disp.mode_hint': 'Video sends H.264 and needs WebCodecs in the browser. The Tesla browser does not provide it, so Picture (MJPEG) is used there.',
     'disp.fit': 'Picture fit', 'disp.fit_contain': 'Fit', 'disp.fit_cover': 'Fill', 'disp.fit_stretch': 'Stretch',
     'disp.stats': 'Performance overlay', 'disp.stats_hint': 'Shows frame rate, bandwidth and decode time over the picture',
     'disp.session': 'Current CarPlay size',
@@ -84,10 +82,7 @@
     'about.ws_lost': 'Not connected to the adapter. Reload the page?',
 
     'dlg.ok': 'OK', 'dlg.cancel': 'Cancel', 'dlg.save': 'Save', 'dlg.reload': 'Reload', 'dlg.close': 'Close',
-    'dlg.yes': 'Yes',
-
-    'video.unsupported': 'This browser cannot decode the video stream.',
-    'video.keyframe': 'Waiting for key frame…', 'video.nosignal': 'No picture from iPhone',
+    'dlg.yes': 'Yes', 'video.nosignal': 'No picture from iPhone',
     'video.backlist': 'Unauthorized device', 'video.touch_hint': 'Tap to interact',
 
     'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': 'decode', 'stat.dropped': 'dropped', 'stat.mode': 'mode'
@@ -133,13 +128,11 @@
     'disp.theme': '테마', 'disp.theme_light': '라이트', 'disp.theme_dark': '다크', 'disp.theme_auto': '야간 모드 따라가기',
     'disp.night': '야간 모드', 'disp.night_hint': 'iPhone이 CarPlay를 어두운 모양으로 그리도록 요청합니다',
     'disp.night_sched': '자동 야간 모드', 'disp.night_off': '끔', 'disp.night_18': '18:00 – 06:00', 'disp.night_19': '19:00 – 07:00',
-    'disp.res': '화면 크기', 'disp.res_sharp': '선명', 'disp.res_balanced': '균형', 'disp.res_saver': '데이터 절약',
+    'disp.res': '화면 크기', 'disp.res_sharp': '선명', 'disp.res_balanced': '균형', 'disp.res_saver': '데이터 절약', 'disp.res_low': '최소',
     'disp.res_device': '기기 설정', 'disp.res_hd': 'HD', 'disp.res_sd': 'SD', 'disp.res_auto': '자동',
-    'disp.res_hint': '선명은 테슬라 화면에 1:1로 표시되지만 Wi‑Fi 대역폭을 더 사용합니다. 균형은 브라우저 크기에 맞춥니다. 기기 설정은 어댑터 자체 프리셋을 사용합니다.',
+    'disp.res_hint': '선명은 테슬라 화면에 1:1로 표시되지만 Wi‑Fi 대역폭을 가장 많이 사용합니다. 균형은 브라우저 크기에 맞춥니다. 데이터 절약과 최소는 화면 크기(와 대역폭)를 더 줄입니다. 기기 설정은 어댑터 자체 프리셋을 사용합니다.',
     'disp.ui_scale': 'CarPlay UI 크기', 'disp.ui_small': '작게', 'disp.ui_normal': '보통', 'disp.ui_large': '크게',
     'disp.fps': '프레임 속도', 'disp.fps_standard': '표준', 'disp.fps_smooth': '부드럽게',
-    'disp.mode': '영상 전송 방식', 'disp.mode_picture': '이미지', 'disp.mode_video': '비디오',
-    'disp.mode_hint': '비디오는 H.264를 전송하며 브라우저에 WebCodecs가 필요합니다. 테슬라 브라우저는 이를 지원하지 않아 이미지(MJPEG) 방식이 사용됩니다.',
     'disp.fit': '화면 맞춤', 'disp.fit_contain': '맞춤', 'disp.fit_cover': '채우기', 'disp.fit_stretch': '늘이기',
     'disp.stats': '성능 오버레이', 'disp.stats_hint': '화면 위에 프레임 속도, 대역폭, 디코딩 시간을 표시합니다',
     'disp.session': '현재 CarPlay 해상도',
@@ -165,10 +158,7 @@
     'about.ws_lost': '어댑터와 연결되어 있지 않습니다. 페이지를 새로고침할까요?',
 
     'dlg.ok': '확인', 'dlg.cancel': '취소', 'dlg.save': '저장', 'dlg.reload': '새로고침', 'dlg.close': '닫기',
-    'dlg.yes': '예',
-
-    'video.unsupported': '이 브라우저에서는 영상 스트림을 디코딩할 수 없습니다.',
-    'video.keyframe': '키 프레임을 기다리는 중…', 'video.nosignal': 'iPhone에서 화면이 오지 않습니다',
+    'dlg.yes': '예', 'video.nosignal': 'iPhone에서 화면이 오지 않습니다',
     'video.backlist': '인증되지 않은 기기', 'video.touch_hint': '탭하여 조작',
 
     'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': '디코딩', 'stat.dropped': '드롭', 'stat.mode': '모드'
@@ -214,13 +204,11 @@
     'disp.theme': '外観', 'disp.theme_light': 'ライト', 'disp.theme_dark': 'ダーク', 'disp.theme_auto': 'ナイトモードに従う',
     'disp.night': 'ナイトモード', 'disp.night_hint': 'iPhone に CarPlay をダーク表示で描画するよう要求します',
     'disp.night_sched': '自動ナイトモード', 'disp.night_off': 'オフ', 'disp.night_18': '18:00 – 06:00', 'disp.night_19': '19:00 – 07:00',
-    'disp.res': '画面サイズ', 'disp.res_sharp': 'シャープ', 'disp.res_balanced': 'バランス', 'disp.res_saver': 'データ節約',
+    'disp.res': '画面サイズ', 'disp.res_sharp': 'シャープ', 'disp.res_balanced': 'バランス', 'disp.res_saver': 'データ節約', 'disp.res_low': '最小',
     'disp.res_device': 'デバイス設定', 'disp.res_hd': 'HD', 'disp.res_sd': 'SD', 'disp.res_auto': '自動',
-    'disp.res_hint': 'シャープは Tesla の画面に 1:1 で表示しますが Wi‑Fi 帯域を多く使います。バランスはブラウザのサイズに合わせます。デバイス設定はアダプター自身のプリセットを使います。',
+    'disp.res_hint': 'シャープは Tesla の画面に 1:1 で表示しますが Wi‑Fi 帯域を最も多く使います。バランスはブラウザのサイズに合わせます。データ節約と最小は画面サイズ（と帯域）をさらに減らします。デバイス設定はアダプター自身のプリセットを使います。',
     'disp.ui_scale': 'CarPlay UI サイズ', 'disp.ui_small': '小', 'disp.ui_normal': '標準', 'disp.ui_large': '大',
     'disp.fps': 'フレームレート', 'disp.fps_standard': '標準', 'disp.fps_smooth': 'スムーズ',
-    'disp.mode': '映像の転送方式', 'disp.mode_picture': '画像', 'disp.mode_video': 'ビデオ',
-    'disp.mode_hint': 'ビデオは H.264 を送信し、ブラウザに WebCodecs が必要です。Tesla のブラウザは対応していないため、画像（MJPEG）方式が使われます。',
     'disp.fit': '画面の合わせ方', 'disp.fit_contain': 'フィット', 'disp.fit_cover': '全体に広げる', 'disp.fit_stretch': '引き伸ばす',
     'disp.stats': 'パフォーマンス表示', 'disp.stats_hint': '画面上にフレームレート・帯域・デコード時間を表示します',
     'disp.session': '現在の CarPlay 解像度',
@@ -246,10 +234,7 @@
     'about.ws_lost': 'アダプターに接続されていません。ページを再読み込みしますか？',
 
     'dlg.ok': 'OK', 'dlg.cancel': 'キャンセル', 'dlg.save': '保存', 'dlg.reload': '再読み込み', 'dlg.close': '閉じる',
-    'dlg.yes': 'はい',
-
-    'video.unsupported': 'このブラウザでは映像ストリームをデコードできません。',
-    'video.keyframe': 'キーフレームを待っています…', 'video.nosignal': 'iPhone から映像がありません',
+    'dlg.yes': 'はい', 'video.nosignal': 'iPhone から映像がありません',
     'video.backlist': '未承認のデバイス', 'video.touch_hint': 'タップして操作',
 
     'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': 'デコード', 'stat.dropped': 'ドロップ', 'stat.mode': 'モード'
@@ -295,13 +280,11 @@
     'disp.theme': '外观', 'disp.theme_light': '浅色', 'disp.theme_dark': '深色', 'disp.theme_auto': '跟随夜间模式',
     'disp.night': '夜间模式', 'disp.night_hint': '请求 iPhone 以深色外观绘制 CarPlay',
     'disp.night_sched': '自动夜间模式', 'disp.night_off': '关闭', 'disp.night_18': '18:00 – 06:00', 'disp.night_19': '19:00 – 07:00',
-    'disp.res': '画面尺寸', 'disp.res_sharp': '清晰', 'disp.res_balanced': '均衡', 'disp.res_saver': '省流量',
+    'disp.res': '画面尺寸', 'disp.res_sharp': '清晰', 'disp.res_balanced': '均衡', 'disp.res_saver': '省流量', 'disp.res_low': '最低',
     'disp.res_device': '设备设置', 'disp.res_hd': '高清', 'disp.res_sd': '标清', 'disp.res_auto': '自动',
-    'disp.res_hint': '“清晰”在 Tesla 屏幕上按 1:1 显示，但占用更多 Wi‑Fi 带宽；“均衡”与浏览器尺寸一致；“设备设置”使用适配器自身的预设。',
+    'disp.res_hint': '“清晰”在 Tesla 屏幕上按 1:1 显示，但占用最多 Wi‑Fi 带宽；“均衡”与浏览器尺寸一致；“省流量”和“最低”进一步缩小画面（和带宽）；“设备设置”使用适配器自身的预设。',
     'disp.ui_scale': 'CarPlay 界面大小', 'disp.ui_small': '小', 'disp.ui_normal': '标准', 'disp.ui_large': '大',
     'disp.fps': '帧率', 'disp.fps_standard': '标准', 'disp.fps_smooth': '流畅',
-    'disp.mode': '视频传输方式', 'disp.mode_picture': '图片', 'disp.mode_video': '视频',
-    'disp.mode_hint': '“视频”传输 H.264，需要浏览器支持 WebCodecs。Tesla 浏览器不支持，因此使用“图片”(MJPEG) 方式。',
     'disp.fit': '画面适配', 'disp.fit_contain': '适应', 'disp.fit_cover': '填充', 'disp.fit_stretch': '拉伸',
     'disp.stats': '性能叠加层', 'disp.stats_hint': '在画面上显示帧率、带宽和解码耗时',
     'disp.session': '当前 CarPlay 分辨率',
@@ -327,10 +310,7 @@
     'about.ws_lost': '未连接到适配器，是否刷新页面？',
 
     'dlg.ok': '确定', 'dlg.cancel': '取消', 'dlg.save': '保存', 'dlg.reload': '刷新', 'dlg.close': '关闭',
-    'dlg.yes': '是',
-
-    'video.unsupported': '此浏览器无法解码视频流。',
-    'video.keyframe': '等待关键帧…', 'video.nosignal': '没有来自 iPhone 的画面',
+    'dlg.yes': '是', 'video.nosignal': '没有来自 iPhone 的画面',
     'video.backlist': '未授权设备', 'video.touch_hint': '点按以操作',
 
     'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': '解码', 'stat.dropped': '丢帧', 'stat.mode': '模式'
@@ -376,13 +356,11 @@
     'disp.theme': '外觀', 'disp.theme_light': '淺色', 'disp.theme_dark': '深色', 'disp.theme_auto': '跟隨夜間模式',
     'disp.night': '夜間模式', 'disp.night_hint': '要求 iPhone 以深色外觀繪製 CarPlay',
     'disp.night_sched': '自動夜間模式', 'disp.night_off': '關閉', 'disp.night_18': '18:00 – 06:00', 'disp.night_19': '19:00 – 07:00',
-    'disp.res': '畫面尺寸', 'disp.res_sharp': '清晰', 'disp.res_balanced': '均衡', 'disp.res_saver': '省流量',
+    'disp.res': '畫面尺寸', 'disp.res_sharp': '清晰', 'disp.res_balanced': '均衡', 'disp.res_saver': '省流量', 'disp.res_low': '最低',
     'disp.res_device': '裝置設定', 'disp.res_hd': '高畫質', 'disp.res_sd': '標準畫質', 'disp.res_auto': '自動',
-    'disp.res_hint': '「清晰」在 Tesla 螢幕上以 1:1 顯示，但佔用較多 Wi‑Fi 頻寬；「均衡」與瀏覽器尺寸一致；「裝置設定」使用轉接器本身的預設。',
+    'disp.res_hint': '「清晰」在 Tesla 螢幕上以 1:1 顯示，但佔用最多 Wi‑Fi 頻寬；「均衡」與瀏覽器尺寸一致；「省流量」和「最低」進一步縮小畫面（和頻寬）；「裝置設定」使用轉接器本身的預設。',
     'disp.ui_scale': 'CarPlay 介面大小', 'disp.ui_small': '小', 'disp.ui_normal': '標準', 'disp.ui_large': '大',
     'disp.fps': '畫面更新率', 'disp.fps_standard': '標準', 'disp.fps_smooth': '流暢',
-    'disp.mode': '影像傳輸方式', 'disp.mode_picture': '圖片', 'disp.mode_video': '影片',
-    'disp.mode_hint': '「影片」傳輸 H.264，需要瀏覽器支援 WebCodecs。Tesla 瀏覽器不支援，因此使用「圖片」(MJPEG) 方式。',
     'disp.fit': '畫面縮放', 'disp.fit_contain': '符合', 'disp.fit_cover': '填滿', 'disp.fit_stretch': '延展',
     'disp.stats': '效能資訊', 'disp.stats_hint': '在畫面上顯示畫面更新率、頻寬與解碼時間',
     'disp.session': '目前 CarPlay 解析度',
@@ -408,10 +386,7 @@
     'about.ws_lost': '未連線到轉接器，是否重新整理頁面？',
 
     'dlg.ok': '確定', 'dlg.cancel': '取消', 'dlg.save': '儲存', 'dlg.reload': '重新整理', 'dlg.close': '關閉',
-    'dlg.yes': '是',
-
-    'video.unsupported': '此瀏覽器無法解碼影像串流。',
-    'video.keyframe': '等待關鍵影格…', 'video.nosignal': '沒有來自 iPhone 的畫面',
+    'dlg.yes': '是', 'video.nosignal': '沒有來自 iPhone 的畫面',
     'video.backlist': '未授權裝置', 'video.touch_hint': '點按以操作',
 
     'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': '解碼', 'stat.dropped': '丟幀', 'stat.mode': '模式'

@@ -14,7 +14,7 @@
  *     type 4/5/6/9 : string payload (bt connect / disconnect / forget / wifi psk)
  *   server -> client : Uint32 header [length, type] followed by payload
  *     0   status JSON   1 init JSON   2 bt list changed   3 link JSON {link, phone}
- *     4   firmware status {val, pong}   5 reload   100 h264 frame   101/102/103 h264 fragments
+ *     4   firmware status {val, pong}   5 reload   100..103 h264 (video mode, unused here)
  *     300 QR text
  */
 (function (global) {
@@ -44,11 +44,8 @@
     this.pong = 0;
     this.timer = 0;
     this.reconnectTimer = 0;
-    this.h264 = null;
-    this.h264off = 0;
     this.decoder = new TextDecoder('utf-8');
     this.hello = null; // {w, h, lang, nav}
-    this.stats = { rxBytes: 0, rxFrames: 0 };
   }
 
   LinkClient.prototype.on = function (ev, fn) {
@@ -98,7 +95,6 @@
   LinkClient.prototype.cleanup = function () {
     this.open = false;
     if (this.timer) { clearInterval(this.timer); this.timer = 0; }
-    this.h264 = null;
   };
 
   LinkClient.prototype.close = function () {
@@ -215,7 +211,6 @@
       return;
     }
     var payload = data.slice(8);
-    this.stats.rxBytes += data.byteLength;
     switch (type) {
       case 0: { var j = this.json(payload); if (!j) return; this.pong = j.pong; this.emit('status', j); break; }
       case 1: { var j1 = this.json(payload); if (!j1) return; this.emit('init', j1); break; }
@@ -223,39 +218,7 @@
       case 3: { var j3 = this.json(payload); if (!j3) return; this.emit('link', j3); break; }
       case 4: { var j4 = this.json(payload); if (!j4) return; this.pong = j4.pong; this.emit('fw', j4); break; }
       case 5: this.emit('reload'); break;
-      case 100: {
-        var l = new Uint32Array(payload.slice(0, 4))[0];
-        if (l + 4 !== payload.byteLength) { console.warn('h264 single len', l, payload.byteLength); break; }
-        this.stats.rxFrames++;
-        this.emit('video', new Uint8Array(payload.slice(4)));
-        break;
-      }
-      case 101: {
-        var total = new Uint32Array(payload.slice(0, 4))[0];
-        if (total > 4000000) { console.warn('h264 first too big', total); break; }
-        this.h264 = new Uint8Array(total);
-        this.h264off = payload.byteLength - 4;
-        if (this.h264off > total) { this.h264 = null; break; }
-        this.h264.set(new Uint8Array(payload.slice(4)), 0);
-        break;
-      }
-      case 102: {
-        if (!this.h264) break;
-        if (this.h264off + payload.byteLength > this.h264.byteLength) { this.h264 = null; break; }
-        this.h264.set(new Uint8Array(payload), this.h264off);
-        this.h264off += payload.byteLength;
-        break;
-      }
-      case 103: {
-        if (!this.h264) break;
-        if (this.h264off + payload.byteLength > this.h264.byteLength) { this.h264 = null; break; }
-        this.h264.set(new Uint8Array(payload), this.h264off);
-        this.h264off += payload.byteLength;
-        var frame = this.h264; this.h264 = null;
-        this.stats.rxFrames++;
-        this.emit('video', frame);
-        break;
-      }
+      case 100: case 101: case 102: case 103: break; // H.264 (video mode) is not used by this UI
       case 300: this.emit('qr', this.decoder.decode(payload)); break;
       default: console.warn('unknown ws type', type); break;
     }

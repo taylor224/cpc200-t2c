@@ -14,7 +14,6 @@
 <!-- CarPlay picture stage: shown only while the iPhone is streaming -->
 <div id="stage" class="stage hidden">
   <canvas id="cp-canvas"></canvas>
-  <canvas id="cp-canvas-worker" class="hidden"></canvas>
   <img id="cp-img" class="hidden" alt="">
   <div id="stage-stats" class="stats hidden"></div>
   <div id="stage-msg" class="stage-msg hidden"></div>
@@ -245,6 +244,7 @@
             <button data-v="sharp" data-i18n="disp.res_sharp"></button>
             <button data-v="balanced" data-i18n="disp.res_balanced"></button>
             <button data-v="saver" data-i18n="disp.res_saver"></button>
+            <button data-v="low" data-i18n="disp.res_low"></button>
             <button data-v="device" data-i18n="disp.res_device"></button>
           </div>
         </div>
@@ -276,13 +276,6 @@
           <div class="seg" id="seg-fps">
             <button data-v="0" data-i18n="disp.fps_standard"></button>
             <button data-v="1" data-i18n="disp.fps_smooth"></button>
-          </div>
-        </div>
-        <div class="row">
-          <div class="row-main"><div class="row-title" data-i18n="disp.mode"></div><div class="row-hint" data-i18n="disp.mode_hint"></div></div>
-          <div class="seg" id="seg-mode">
-            <button data-v="0" data-i18n="disp.mode_picture"></button>
-            <button data-v="1" data-i18n="disp.mode_video"></button>
           </div>
         </div>
         <div class="row">

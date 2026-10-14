@@ -45,7 +45,7 @@
     channel: -1, chtmp: 255,
     icon: '', icons: {}, lyver: '',
     btconn: null, btdelay: null, btdel: null,
-    pixel: 3, mode: 0, webcodecs: false,
+    pixel: 3,
     updating: false, updateUrl: null,
     hasCell: true
   };
@@ -171,15 +171,7 @@
   function startVideo() {
     showStage(true);
     $('stage-msg').classList.add('hidden');
-    if (state.mode === 1 && state.webcodecs) {
-      presenter.startWebCodecs();
-    } else if (state.mode === 1 && !state.webcodecs) {
-      presenter.stop();
-      $('stage-msg').textContent = t('video.unsupported');
-      $('stage-msg').classList.remove('hidden');
-    } else {
-      presenter.startMjpeg('/video.jpg');
-    }
+    presenter.start('/video.jpg');
   }
 
   function stopVideo() {
@@ -241,6 +233,7 @@
     switch (prefs.res) {
       case 'sharp': s = dpr; break;
       case 'saver': s = 0.75; break;
+      case 'low': s = 0.6; break;
       case 'device': return null;
       default: s = 1;
     }
@@ -576,7 +569,7 @@
     state.init = j;
     state.lyver = (j.LY || '').split('.')[1] || '';
     state.channel = j.ch; state.chtmp = j.sh;
-    state.pixel = j.pixel; state.mode = j.vid ? 1 : 0;
+    state.pixel = j.pixel;
     state.icon = j.icon || ''; state.icons = j.icons || {};
     state.night = j.night;
 
@@ -596,7 +589,6 @@
     segSet('seg-pixel', j.pixel);
     segSet('seg-driver', j.driver);
     segSet('seg-fps', j.fps);
-    segSet('seg-mode', j.vid ? 1 : 0);
     $('car-name').value = j.name || '';
     renderIcons();
     $('about-model').textContent = j.SN || '';
@@ -612,12 +604,8 @@
     scheduleNightTick();
     applyTheme();
 
-    // Video transport sanity: the Tesla browser lacks WebCodecs, so make sure the
-    // adapter streams pictures when it is configured for H.264 and we cannot decode it.
-    if (state.mode === 1 && !state.webcodecs) {
-      link.setKey(KEY.MODE, 0); state.mode = 0; segSet('seg-mode', 0);
-      toast(t('disp.mode_hint'), 5000);
-    }
+    // This UI only renders the MJPEG stream; keep the adapter in picture mode.
+    if (j.vid) link.setKey(KEY.MODE, 0);
 
     applySession(false);
     switchVideo(j.link);
@@ -753,11 +741,6 @@
     });
     segBind('seg-uiscale', function (v) { prefs.uiScale = v; store.set('uiScale', v); applySession(true); });
     segBind('seg-fps', function (v) { if (!requireLink()) return false; link.setKey(KEY.FPS, +v); });
-    segBind('seg-mode', function (v) {
-      if (!requireLink()) return false;
-      if (+v === 1 && !state.webcodecs) { toast(t('disp.mode_hint'), 5000); return false; }
-      state.mode = +v; link.setKey(KEY.MODE, +v);
-    });
     segBind('seg-fit', function (v) { prefs.fit = v; store.set('fit', v); presenter.setFit(v); });
     $('stats').onchange = function () { prefs.stats = this.checked; store.set('stats', prefs.stats); presenter.setStatsVisible(prefs.stats); };
     $('online').onchange = function () { if (!requireLink()) { this.checked = !this.checked; return; } link.setKey(KEY.ONLINE, this.checked ? 1 : 0); };
@@ -814,8 +797,7 @@
     $('stats').checked = !!prefs.stats;
 
     presenter = new VideoPresenter({
-      canvas: $('cp-canvas'), canvasWorker: $('cp-canvas-worker'), img: $('cp-img'), statsEl: $('stage-stats'), fit: prefs.fit,
-      onKeyframeNeeded: (function () { var tmr = 0; return function () { if (tmr) return; tmr = setTimeout(function () { tmr = 0; link.cmd(CMD.KEYFRAME); }, 1500); }; })(),
+      canvas: $('cp-canvas'), img: $('cp-img'), statsEl: $('stage-stats'), fit: prefs.fit,
       onMessage: function (kind, a, b) {
         if (kind === 'size') $('session-info').textContent = a + ' × ' + b + ($('session-info').getAttribute('data-mm') || '');
         if (kind === 'error') console.warn('video', a);
@@ -834,7 +816,6 @@
       .on('btlist', function () { if (state.page === 'devices') updateBtList(); })
       .on('fw', onFwStatus)
       .on('reload', reload)
-      .on('video', function (bytes) { if (state.link > 1) presenter.feedH264(bytes); })
       .on('qr', function (text) {
         var qr = $('qr'); qr.innerHTML = '';
         try { new QRCode(qr, { text: text, width: 256, height: 256, correctLevel: QRCode.CorrectLevel.M }); } catch (e) { qr.textContent = text; }
@@ -843,10 +824,7 @@
       .on('close', function () { switchVideo(-1); })
       .on('open', function () { /* hello sent by client */ });
 
-    VideoPresenter.supportsWebCodecs().then(function (ok) {
-      state.webcodecs = ok;
-      link.connect({ w: window.innerWidth, h: window.innerHeight, lang: navigator.language, nav: getTesla() });
-    });
+    link.connect({ w: window.innerWidth, h: window.innerHeight, lang: navigator.language, nav: getTesla() });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
