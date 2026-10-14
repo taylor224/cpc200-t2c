@@ -31,8 +31,15 @@ and a page reload loop on resize. Carlinkit has not shipped a fix.
   main thread with `createImageBitmap`, and painted the moment the bitmap is ready on
   a desynchronized canvas. Only the newest frame is decoded; stale frames are dropped,
   so latency never accumulates and the TCP stream never stalls the adapter.
-- The adapter is kept in picture mode. Its H.264 "video" mode needs WebCodecs, which
-  the Tesla browser does not provide, so that path was removed from this UI.
+- **H.264 in the browser without WebCodecs.** The adapter's "video" mode forwards the
+  iPhone's H.264 stream unchanged over the WebSocket. This UI decodes it in a Web Worker
+  with FFmpeg's h264 decoder compiled to WebAssembly (`tools/build-h264dec.sh`, SIMD) and
+  paints the YUV planes through a WebGL shader on an OffscreenCanvas. Result: 3–5× less
+  Wi‑Fi bandwidth than MJPEG and no transcoding inside the adapter. *Video transport*
+  in Display settings is Automatic by default: H.264 when the browser has WebAssembly
+  SIMD + OffscreenCanvas + WebGL, MJPEG otherwise; if the decoder cannot keep up (more
+  than 40 % of frames dropped for 5 s) it switches back to MJPEG and remembers that for
+  a week. Picture / Video force one transport.
 - Touch moves are coalesced per animation frame; pointer events with capture.
 - A performance overlay (fps, bandwidth, decode time, dropped frames) can be toggled in
   Display settings.
@@ -59,10 +66,13 @@ About page (the final location is still to be decided).
   at compile time, and the adapter firmware has no audio path over the WebSocket, so
   intermittent microphone drop‑outs are a Bluetooth stack issue inside the closed
   `gocsdk`/`libGbtsTask` binaries and cannot be fixed from the web UI.
-- True low‑bandwidth video (H.264 at a few Mbit/s instead of MJPEG) needs an H.264
-  decoder in the browser, which the Tesla browser lacks. A WebAssembly decoder is
-  possible but was not added (see `docs/NOTES.md`). JPEG quality is fixed inside the
-  adapter binaries; the levers available here are picture size and frame rate.
+- The WebAssembly decoder runs single‑threaded (the adapter's server cannot send the
+  COOP/COEP headers needed for threads). Intel‑era cars (MCU2) may not sustain 30 fps
+  at the *Sharp* size; use *Balanced* or let Automatic fall back to MJPEG. JPEG quality
+  in MJPEG mode is fixed inside the adapter binaries.
+- The `customer` partition grows by about 1 MB (compressed decoder). Check the
+  partition size before flashing: `curl -s 'http://192.168.3.1/cgi-bin/index.cgi?id=logcat' |
+  gunzip | grep -i customer` shows the MTD layout from `dmesg`.
 
 ## Build
 
@@ -76,6 +86,13 @@ tools/build.sh test.img build/T2C-tesla-ui.img
 `tools/build.sh` unpacks the image (`md5 line + SWUpdate CPIO`), extracts the `customer`
 squashfs, replaces `app/www`, repacks with the original parameters (xz, 256 KiB blocks,
 root‑owned 0755) and verifies the result (`tools/verify.sh`).
+
+The H.264 decoder (`src/www/js/h264dec.js` + `h264dec.wasm.txt`) is a committed build
+artifact. To rebuild it: `brew install emscripten` (needs Python ≥ 3.10) and run
+`tools/build-h264dec.sh`; it downloads FFmpeg 7.1.1 from ffmpeg.org, checks the pinned
+SHA‑256, builds only the h264 decoder with `-O3 -msimd128`, and links `tools/h264dec/decoder.c`.
+The `.txt` extension is deliberate: the adapter's libwebsockets 3.2 refuses to serve
+extensions it does not know, and `.wasm` is not in its table.
 
 ## Flash
 
@@ -95,6 +112,9 @@ Flashing can brick the adapter; there is no A/B fallback.
 
 ```
 python3 tools/devserver.py --frames /path/to/jpegs --link-after 4        # MJPEG mock
+python3 tools/devserver.py --mode video --h264 stream.h264 --link-after 2  # H.264 mock
+ffmpeg -f lavfi -i testsrc2=size=1184x912:rate=30 -t 4 -c:v libx264 -profile:v high \
+  -x264-params keyint=30:repeat-headers=1:annexb=1:bframes=0 -f h264 stream.h264   # mock stream
 ```
 
 The simulator reproduces the adapter's templating, WebSocket protocol, `/video.jpg`

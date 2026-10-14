@@ -161,25 +161,39 @@ def h264_loop():
     if not ARGS.h264:
         return
     data = open(ARGS.h264, 'rb').read()
-    # split at 00 00 00 01 start codes; group SPS/PPS with the following IDR
-    units = []
+    # Split the Annex-B stream into access units: NAL units start with 00 00 01 (or
+    # 00 00 00 01); a VCL NAL with first_mb_in_slice == 0 begins a new picture.
+    starts = []
     i = 0
     while True:
-        j = data.find(b'\x00\x00\x00\x01', i + 4)
+        j = data.find(b'\x00\x00\x01', i)
         if j < 0:
-            units.append(data[i:])
             break
-        units.append(data[i:j])
-        i = j
+        starts.append(j + 3)
+        i = j + 3
+    nals = []
+    for n, st in enumerate(starts):
+        end = starts[n + 1] - 3 if n + 1 < len(starts) else len(data)
+        if end > st and data[end - 1] == 0:   # 4-byte start code of the next NAL
+            end -= 1
+        nals.append(data[st:end])
     frames = []
     acc = b''
-    for u in units:
-        nal = u[4] & 0x1f
-        if nal in (7, 8, 6, 9):  # SPS/PPS/SEI/AUD: attach to next VCL
-            acc += u
-        else:
-            frames.append(acc + u)
+    has_vcl = False
+    for u in nals:
+        t = u[0] & 0x1f
+        vcl = t in (1, 2, 3, 4, 5)
+        first_mb0 = vcl and len(u) > 1 and (u[1] & 0x80) != 0
+        if vcl and has_vcl and first_mb0:
+            frames.append(acc)
             acc = b''
+            has_vcl = False
+        acc += b'\x00\x00\x00\x01' + u
+        if vcl:
+            has_vcl = True
+    if acc:
+        frames.append(acc)
+    log('h264 mock: %d access units' % len(frames))
     k = 0
     while True:
         if STATE['link'] > 1 and STATE['cfg']['vid']:

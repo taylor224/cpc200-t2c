@@ -60,7 +60,7 @@ total = 0
 for d, _, fs in os.walk(WWW):
     for f in fs:
         total += os.path.getsize(os.path.join(d, f))
-check(total < 600 * 1024, 'src/www total %d KB < 600 KB' % (total // 1024))
+check(total < 2200 * 1024, 'src/www total %d KB < 2200 KB (includes the 1.4 MB H.264 decoder)' % (total // 1024))
 
 print('\n%d failure(s)' % fails)
 sys.exit(1 if fails else 0)

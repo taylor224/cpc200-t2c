@@ -84,16 +84,15 @@ Not on the web path at all. `lylinkui` handles `LYLINK_AUDIO_START/STOP` and
 `LYLINK_RECORD_*` by routing PCM to the Goodix Bluetooth chip (A2DP to the car, HFP
 SCO from the car's microphone). `/mic_test.pcm` records a sample from that path.
 
-## Why no H.264 in the web UI
+## H.264 in the browser
 
 Tesla pauses `<video>` elements while driving (OS level), so any decoder must paint a
-canvas. The Tesla browser has no WebCodecs, so the adapter's H.264 "video" mode cannot
-be decoded there at all; this UI keeps the adapter in picture mode (`KEY.MODE = 0`).
-
-## WASM H.264 fallback (not implemented)
-
-The adapter encodes High profile (`avc1.64001f`, CABAC). Browser‑side software decoders
-that are widely used are either baseline‑only (`tinyh264`, Broadway) or too large for the
-8 MB `customer` partition (`@ffmpeg/core`). A trimmed openh264/ffmpeg build compiled with
-Emscripten would work on MCU3 (Ryzen) cars; MCU2 (Atom) would likely drop below 20 fps
-at 1184×912. Left out pending a decision.
+canvas, and the Tesla browser has no WebCodecs. The iPhone's stream is High profile
+(`avc1.64001f`, CABAC, no B‑frames). Widely used JS decoders are baseline‑only
+(`tinyh264`, Broadway), so FFmpeg's h264 decoder is compiled to WebAssembly instead
+(`tools/build-h264dec.sh`: `--disable-everything --enable-decoder=h264`, `-O3 -msimd128`,
+single‑threaded, ~1.4 MB). `js/h264worker.js` feeds complete access units
+(`AV_CODEC_FLAG_LOW_DELAY`, newest‑wins queue) and uploads the YUV planes to three
+textures; BT.601/709 and range come from the SPS VUI. Threads are impossible because
+the adapter's server cannot send COOP/COEP. libwebsockets 3.2 refuses unknown
+extensions, so the module ships as `h264dec.wasm.txt` and is loaded via `wasmBinary`.

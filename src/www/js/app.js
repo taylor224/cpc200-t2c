@@ -36,6 +36,7 @@
     uiScale: store.get('uiScale', 'normal'),
     fit: store.get('fit', 'contain'),
     stats: store.get('stats', false),
+    transport: store.get('transport', 'auto'),
     updateUrl: store.get('updateUrl', '')
   };
 
@@ -45,7 +46,7 @@
     channel: -1, chtmp: 255,
     icon: '', icons: {}, lyver: '',
     btconn: null, btdelay: null, btdel: null,
-    pixel: 3,
+    pixel: 3, vid: false,
     updating: false, updateUrl: null,
     hasCell: true
   };
@@ -171,7 +172,41 @@
   function startVideo() {
     showStage(true);
     $('stage-msg').classList.add('hidden');
-    presenter.start('/video.jpg');
+    if (state.vid) presenter.startH264();
+    else presenter.start('/video.jpg');
+  }
+
+  /* ------------------------------------------------------- transport */
+
+  var H264_SLOW_TTL = 7 * 86400 * 1000;   // remember a too-slow verdict for a week
+
+  function wantVideo() {
+    if (!VideoPresenter.canH264()) return false;
+    if (prefs.transport === 'video') return true;
+    if (prefs.transport === 'picture') return false;
+    var slow = store.get('h264slow', 0);
+    return !(slow && Date.now() - slow < H264_SLOW_TTL);
+  }
+
+  /** Put the adapter in the transport mode we can render; restart the session when needed. */
+  function applyTransport(userAction) {
+    var want = wantVideo();
+    if (!link.open) { state.vid = want; return; }
+    if (state.vid !== want) {
+      link.setKey(KEY.MODE, want ? 1 : 0);
+      state.vid = want;
+      // The adapter picks the pipeline when the iPhone's video starts, so an active
+      // session has to be restarted: reloading in Auto picture-size mode does that.
+      if (state.link >= 1 || userAction) { session.set('modeSig', want ? '1' : '0'); setTimeout(reload, 400); }
+    }
+  }
+
+  function h264Failed(reason) {
+    console.warn('h264 fallback:', reason);
+    store.set('h264slow', Date.now());
+    toast(t(reason === 'slow' ? 'video.slow' : 'video.unsupported'), 5000);
+    if (prefs.transport === 'video') { prefs.transport = 'auto'; store.set('transport', 'auto'); segSet('seg-mode', 'auto'); }
+    applyTransport(true);
   }
 
   function stopVideo() {
@@ -604,8 +639,8 @@
     scheduleNightTick();
     applyTheme();
 
-    // This UI only renders the MJPEG stream; keep the adapter in picture mode.
-    if (j.vid) link.setKey(KEY.MODE, 0);
+    state.vid = !!j.vid;
+    applyTransport(false);
 
     applySession(false);
     switchVideo(j.link);
@@ -742,6 +777,12 @@
     segBind('seg-uiscale', function (v) { prefs.uiScale = v; store.set('uiScale', v); applySession(true); });
     segBind('seg-fps', function (v) { if (!requireLink()) return false; link.setKey(KEY.FPS, +v); });
     segBind('seg-fit', function (v) { prefs.fit = v; store.set('fit', v); presenter.setFit(v); });
+    segBind('seg-mode', function (v) {
+      if (v === 'video' && !VideoPresenter.canH264()) { toast(t('video.unsupported'), 4000); return false; }
+      prefs.transport = v; store.set('transport', v);
+      if (v !== 'auto') store.set('h264slow', 0);
+      applyTransport(true);
+    });
     $('stats').onchange = function () { prefs.stats = this.checked; store.set('stats', prefs.stats); presenter.setStatsVisible(prefs.stats); };
     $('online').onchange = function () { if (!requireLink()) { this.checked = !this.checked; return; } link.setKey(KEY.ONLINE, this.checked ? 1 : 0); };
     $('btnet').onchange = function () { if (!requireLink()) { this.checked = !this.checked; return; } link.setKey(KEY.BTNET, this.checked ? 2 : 1); };
@@ -794,13 +835,21 @@
     I18N.init();
     applyTheme();
     segSet('seg-theme', prefs.theme); segSet('seg-res', prefs.res); segSet('seg-uiscale', prefs.uiScale); segSet('seg-fit', prefs.fit);
+    segSet('seg-mode', prefs.transport);
     $('stats').checked = !!prefs.stats;
 
+    var keyTimer = 0;
     presenter = new VideoPresenter({
-      canvas: $('cp-canvas'), img: $('cp-img'), statsEl: $('stage-stats'), fit: prefs.fit,
+      canvas: $('cp-canvas'), canvasWorker: $('cp-canvas-worker'), img: $('cp-img'), statsEl: $('stage-stats'), fit: prefs.fit,
       onMessage: function (kind, a, b) {
         if (kind === 'size') $('session-info').textContent = a + ' × ' + b + ($('session-info').getAttribute('data-mm') || '');
-        if (kind === 'error') console.warn('video', a);
+        else if (kind === 'needkey') {
+          if (!keyTimer) keyTimer = setTimeout(function () { keyTimer = 0; link.cmd(CMD.KEYFRAME); }, 1000);
+          $('stage-msg').textContent = t('video.keyframe'); $('stage-msg').classList.remove('hidden');
+        }
+        else if (kind === 'key') $('stage-msg').classList.add('hidden');
+        else if (kind === 'slow') h264Failed('slow');
+        else if (kind === 'h264error') h264Failed(a);
       }
     });
     presenter.setStatsVisible(prefs.stats);
@@ -816,6 +865,7 @@
       .on('btlist', function () { if (state.page === 'devices') updateBtList(); })
       .on('fw', onFwStatus)
       .on('reload', reload)
+      .on('video', function (bytes) { if (state.link > 1) presenter.feedH264(bytes); })
       .on('qr', function (text) {
         var qr = $('qr'); qr.innerHTML = '';
         try { new QRCode(qr, { text: text, width: 256, height: 256, correctLevel: QRCode.CorrectLevel.M }); } catch (e) { qr.textContent = text; }

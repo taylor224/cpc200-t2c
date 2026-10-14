@@ -1,15 +1,18 @@
-/* Video presenter for the CarPlay picture (MJPEG only).
+/* Video presenter for the CarPlay picture. Two transports:
  *
- * GET /video.jpg is a multipart/x-mixed-replace stream of JPEG frames produced by the
- * adapter's hardware encoder. It is consumed with a streaming fetch reader, each
- * frame is decoded off the main thread with createImageBitmap and painted on a 2D
- * canvas as soon as the bitmap is ready. Only the newest frame is ever decoded:
- * anything that arrives while a decode is in flight replaces the pending frame, so
- * latency never accumulates and the TCP stream never stalls the adapter.
+ *  MJPEG  GET /video.jpg (multipart/x-mixed-replace) consumed with a streaming fetch
+ *         reader, decoded off the main thread with createImageBitmap and painted on a
+ *         2D canvas the moment the bitmap is ready. Only the newest frame is decoded;
+ *         stale frames are dropped, so latency never accumulates.
  *
- * The canvas backing store always has the frame's own size; CSS object-fit does the
- * scaling on the GPU. Touch coordinates are mapped back through the same fit rule.
- * Browsers without streaming fetch / createImageBitmap fall back to a plain <img>.
+ *  H.264  The adapter forwards the iPhone's H.264 stream over the WebSocket. Frames
+ *         are decoded in a Web Worker by FFmpeg compiled to WebAssembly and painted
+ *         through WebGL on an OffscreenCanvas (js/h264worker.js). 3–5× less bandwidth
+ *         than MJPEG and no transcoding inside the adapter. If the worker cannot keep
+ *         up, 'slow' is reported and the app falls back to MJPEG.
+ *
+ * Canvas backing stores always have the frame's own size; CSS object-fit does the
+ * scaling. Touch coordinates are mapped back through the same fit rule.
  */
 (function (global) {
   'use strict';
@@ -17,23 +20,43 @@
   function now() { return (global.performance && performance.now) ? performance.now() : Date.now(); }
 
   function VideoPresenter(opts) {
-    this.canvas = opts.canvas;
+    this.canvas = opts.canvas;              // 2D canvas for MJPEG
+    this.canvasWorker = opts.canvasWorker;  // transferred (once, permanently) to the H.264 worker
     this.img = opts.img;
     this.statsEl = opts.statsEl;
     this.onMessage = opts.onMessage || function () {};
     this.fit = opts.fit || 'contain';
-    this.mode = 'idle';           // 'mjpeg' | 'img' | 'idle'
+    this.mode = 'idle';           // 'mjpeg' | 'img' | 'h264' | 'idle'
     this.surface = 'canvas';
     this.frameW = 0; this.frameH = 0;
     this.ctx = null;
     this.abort = null;
-    this.pending = null;          // newest undecoded JPEG bytes
+    this.pending = null;
     this.decoding = false;
+    this.worker = null; this.workerReady = false;
+    this.slowSeconds = 0;
     this.showStats = false;
     this.stats = this.resetStats();
     this.statsTimer = 0;
     this.setFit(this.fit);
   }
+
+  /* ------------------------------------------------------------ capability */
+
+  VideoPresenter.canH264 = function () {
+    return typeof global.WebAssembly === 'object' && typeof WebAssembly.instantiate === 'function' &&
+      typeof global.Worker === 'function' && typeof global.OffscreenCanvas === 'function' &&
+      typeof HTMLCanvasElement.prototype.transferControlToOffscreen === 'function';
+  };
+
+  /** WebAssembly SIMD feature test (module with a single v128 op). */
+  VideoPresenter.wasmSimd = function () {
+    try {
+      return WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11]));
+    } catch (e) { return false; }
+  };
+
+  /* --------------------------------------------------------------- common */
 
   VideoPresenter.prototype.resetStats = function () {
     return { rx: 0, painted: 0, dropped: 0, bytes: 0, decodeMs: 0, decodeN: 0, t0: now(), fps: 0, rxfps: 0, kbps: 0, dec: 0 };
@@ -42,19 +65,15 @@
   VideoPresenter.prototype.setFit = function (fit) {
     this.fit = fit;
     var css = fit === 'cover' ? 'cover' : fit === 'stretch' ? 'fill' : 'contain';
-    if (this.canvas) this.canvas.style.objectFit = css;
-    if (this.img) this.img.style.objectFit = css;
+    [this.canvas, this.canvasWorker, this.img].forEach(function (el) { if (el) el.style.objectFit = css; });
   };
 
   VideoPresenter.prototype.setStatsVisible = function (v) {
     var self = this;
     this.showStats = !!v;
     if (this.statsEl) this.statsEl.classList.toggle('hidden', !v);
-    if (v && !this.statsTimer) {
-      this.statsTimer = setInterval(function () { self.updateStats(); }, 1000);
-    } else if (!v && this.statsTimer) {
-      clearInterval(this.statsTimer); this.statsTimer = 0;
-    }
+    if (v && !this.statsTimer) this.statsTimer = setInterval(function () { self.updateStats(); }, 1000);
+    else if (!v && this.statsTimer) { clearInterval(this.statsTimer); this.statsTimer = 0; }
   };
 
   VideoPresenter.prototype.updateStats = function () {
@@ -77,6 +96,7 @@
 
   VideoPresenter.prototype.showSurface = function (which) {
     if (this.canvas) this.canvas.classList.toggle('hidden', which !== 'canvas');
+    if (this.canvasWorker) this.canvasWorker.classList.toggle('hidden', which !== 'worker');
     if (this.img) this.img.classList.toggle('hidden', which !== 'img');
     this.surface = which;
   };
@@ -103,7 +123,6 @@
         if (signal.aborted) return;
         console.warn('mjpeg stream ended', e && e.message);
         self.onMessage('ended');
-        // Fall back to the <img> path; the browser handles reconnection itself.
         if (self.mode === 'mjpeg') self.startImg(url);
       });
   };
@@ -135,7 +154,7 @@
       }
       return -1;
     }
-    function findSOI(u8) { // FF D8 = start of JPEG
+    function findSOI(u8) {
       for (var i = 0; i + 1 < u8.length; i++) if (u8[i] === 0xFF && u8[i + 1] === 0xD8) return i;
       return -1;
     }
@@ -149,7 +168,7 @@
           if (need === -1) {
             var h = indexOfCRLFCRLF(buf, 0);
             if (h < 0) {
-              if (buf.length > 65536) buf = new Uint8Array(0); // garbage guard
+              if (buf.length > 65536) buf = new Uint8Array(0);
               break;
             }
             var head = td.decode(buf.subarray(0, h));
@@ -208,8 +227,6 @@
       .then(function () { self.decoding = false; self.decodeNext(); });
   };
 
-  /** Paint immediately: with a desynchronized context this reaches the display without
-   *  waiting for the next animation frame, which saves up to one frame interval. */
   VideoPresenter.prototype.paint = function (bmp) {
     if (!this.ctx || this.mode !== 'mjpeg') { bmp.close(); return; }
     if (bmp.width !== this.canvas.width || bmp.height !== this.canvas.height) {
@@ -222,26 +239,77 @@
     this.stats.painted++;
   };
 
+  /* ------------------------------------------------------------------ H.264 */
+
+  VideoPresenter.prototype.startH264 = function () {
+    var self = this;
+    this.stop();
+    this.mode = 'h264';
+    this.slowSeconds = 0;
+    this.showSurface('worker');
+    if (this.worker) { this.worker.postMessage({ id: 'clear' }); return; }
+    try {
+      var off = this.canvasWorker.transferControlToOffscreen();
+      this.worker = new Worker('js/h264worker.js');
+      this.worker.onmessage = function (ev) { self.onWorkerMessage(ev.data); };
+      this.worker.onerror = function (e) { self.onMessage('h264error', String(e && e.message)); };
+      var simd = VideoPresenter.wasmSimd();
+      try { if (localStorage.getItem('t2c.nosimd') === '1') simd = false; } catch (e) { /* ignore */ }
+      this.worker.postMessage({ id: 'init', canvas: off, simd: simd }, [off]);
+    } catch (e) {
+      this.worker = null;
+      this.onMessage('h264error', String(e && e.message));
+    }
+  };
+
+  VideoPresenter.prototype.onWorkerMessage = function (d) {
+    if (!d) return;
+    switch (d.id) {
+      case 'ready': this.workerReady = true; this.onMessage('ready', d.gl2); break;
+      case 'size': this.frameW = d.w; this.frameH = d.h; this.onMessage('size', d.w, d.h); break;
+      case 'key': this.onMessage('key'); break;
+      case 'needkey': this.onMessage('needkey'); break;
+      case 'error': this.onMessage('h264error', d.message); break;
+      case 'stats':
+        if (this.mode !== 'h264') break;
+        this.stats.painted += d.dec; this.stats.decodeMs += d.ms; this.stats.decodeN += d.dec; this.stats.dropped += d.drop;
+        // Decoder cannot keep up: more than 40 % of the received frames dropped for 5 s.
+        if (d.rx >= 12 && d.dec < d.rx * 0.6) { if (++this.slowSeconds >= 5) { this.slowSeconds = 0; this.onMessage('slow'); } }
+        else this.slowSeconds = 0;
+        break;
+    }
+  };
+
+  /** Feed one Annex-B access unit (Uint8Array, ownership transferred). */
+  VideoPresenter.prototype.feedH264 = function (u8) {
+    if (this.mode !== 'h264' || !this.worker) return;
+    this.stats.rx++; this.stats.bytes += u8.byteLength;
+    var buf = (u8.byteOffset === 0 && u8.byteLength === u8.buffer.byteLength) ? u8.buffer : u8.slice().buffer;
+    this.worker.postMessage({ id: 'decode', data: buf }, [buf]);
+  };
+
+  /* ----------------------------------------------------------------- misc */
+
   VideoPresenter.prototype.clear = function () {
     if (this.ctx && this.canvas.width) {
       this.ctx.fillStyle = '#000';
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
+    if (this.worker) this.worker.postMessage({ id: 'clear' });
   };
 
   VideoPresenter.prototype.stop = function () {
     if (this.abort) { try { this.abort.abort(); } catch (e) { /* ignore */ } this.abort = null; }
     if (this.img && this.mode === 'img') { this.img.removeAttribute('src'); }
+    if (this.worker && this.mode === 'h264') this.worker.postMessage({ id: 'clear' });
     this.pending = null; this.decoding = false;
     this.mode = 'idle';
     this.stats = this.resetStats();
   };
 
-  /* --------------------------------------------------------------- mapping */
-
   /** Map a client point to CarPlay per-mille coordinates honouring object-fit. */
   VideoPresenter.prototype.toPerMille = function (clientX, clientY) {
-    var el = this.surface === 'img' ? this.img : this.canvas;
+    var el = this.surface === 'img' ? this.img : this.surface === 'worker' ? this.canvasWorker : this.canvas;
     var r = el.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) return null;
     var fw = this.frameW || (el.naturalWidth || el.width) || r.width;
