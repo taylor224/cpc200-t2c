@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Microphone test</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="js/boot.js"></script>
+<link rel="stylesheet" href="css/styles.css">
+<style>
+  body { overflow: auto; }
+  .wrap { max-width: 56rem; margin: 0 auto; padding: 1.5rem 2rem; }
+  .wave { width: 100%; height: 14rem; border-radius: var(--r-card); background: var(--surface-alt); display: block; }
+  .bar { display: flex; gap: 0.75rem; margin: 1rem 0; align-items: center; flex-wrap: wrap; }
+  .res { font-weight: 500; }
+  .res.ok { color: #1FB05A; } .res.ng { color: var(--danger); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2 class="page-title" data-i18n="sys.mic_test">Microphone test</h2>
+  <canvas id="wave" class="wave" width="1600" height="400"></canvas>
+  <div class="bar">
+    <a class="btn btn-secondary" href="/" data-i18n="dlg.close">Close</a>
+    <button class="btn btn-primary" id="mic">Test</button>
+    <span id="res" class="res"></span>
+  </div>
+  <p class="muted small">The adapter records a short sample from the Bluetooth hands-free microphone path and shows the waveform. Speak after pressing Test.</p>
+</div>
+<script src="js/i18n.js"></script>
+<script>
+(function () {
+  I18N.init();
+  var busy = false;
+  var c = document.getElementById('wave'), ctx = c.getContext('2d');
+  function clear() {
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--surface-alt') || '#f4f4f4';
+    ctx.fillRect(0, 0, c.width, c.height);
+  }
+  clear();
+  document.getElementById('mic').onclick = function () {
+    if (busy) return;
+    busy = true;
+    var res = document.getElementById('res'); res.className = 'res'; res.textContent = '…';
+    clear();
+    fetch('/mic_test.pcm', { cache: 'no-store' }).then(function (r) { return r.arrayBuffer(); }).then(function (a) {
+      var pcm = new Int16Array(a.slice(2000));
+      var n = Math.min(pcm.length, c.width);
+      var min = 0, max = 0;
+      ctx.lineWidth = 2; ctx.strokeStyle = '#3E6AE1'; ctx.beginPath();
+      for (var x = 0; x < n; x++) {
+        var v = pcm[Math.floor(x * pcm.length / n)];
+        if (v < min) min = v; if (v > max) max = v;
+        var y = c.height / 2 - v * (c.height / 2) / 32768;
+        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      var ok = min < -200 || max > 200;
+      res.className = 'res ' + (ok ? 'ok' : 'ng');
+      res.textContent = (ok ? 'OK' : 'FAIL') + ' (' + min + ', ' + max + ')';
+    }).catch(function (e) { res.className = 'res ng'; res.textContent = e.message; }).then(function () { busy = false; });
+  };
+})();
+</script>
+</body>
+</html>

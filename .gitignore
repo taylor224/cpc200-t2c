@@ -1,0 +1,7 @@
+# firmware images are large binaries; keep them local
+*.img
+*.swu
+build/
+work/
+node_modules/
+.DS_Store

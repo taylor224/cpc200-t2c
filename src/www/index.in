@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CarPlay</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<script src="js/boot.js"></script>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- CarPlay picture stage: shown only while the iPhone is streaming -->
+<div id="stage" class="stage hidden">
+  <canvas id="cp-canvas"></canvas>
+  <canvas id="cp-canvas-worker" class="hidden"></canvas>
+  <img id="cp-img" class="hidden" alt="">
+  <div id="stage-stats" class="stats hidden"></div>
+  <div id="stage-msg" class="stage-msg hidden"></div>
+  <div id="backlist" class="backlist hidden" data-i18n="video.backlist"></div>
+  <button id="btn-stage-settings" class="stage-settings" aria-label="Settings">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
+</div>
+
+<div id="app" class="app">
+  <nav class="nav" id="nav">
+    <div class="nav-brand">
+      <span class="wordmark">C A R P L A Y</span>
+      <span class="brand-sub">TesPush T2C</span>
+    </div>
+    <ul class="nav-list">
+      <li><a class="nav-item active" data-page="home" href="#home">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+        <span data-i18n="nav.home"></span></a></li>
+      <li><a class="nav-item" data-page="devices" href="#devices">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18h2"/></svg>
+        <span data-i18n="nav.devices"></span></a></li>
+      <li id="nav-cellular"><a class="nav-item" data-page="cellular" href="#cellular">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h2v-4H3zM8 20h2v-8H8zM13 20h2V8h-2zM18 20h2V4h-2z"/></svg>
+        <span data-i18n="nav.cellular"></span></a></li>
+      <li><a class="nav-item" data-page="wifi" href="#wifi">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.5a16 16 0 0 1 20 0"/><path d="M5.5 12.5a11 11 0 0 1 13 0"/><path d="M9 16.2a5.5 5.5 0 0 1 6 0"/><circle cx="12" cy="19.5" r="0.8" fill="currentColor"/></svg>
+        <span data-i18n="nav.wifi"></span></a></li>
+      <li><a class="nav-item" data-page="bluetooth" href="#bluetooth">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10-5 5V2l5 5L7 17"/></svg>
+        <span data-i18n="nav.bluetooth"></span></a></li>
+      <li><a class="nav-item" data-page="display" href="#display">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <span data-i18n="nav.display"></span></a></li>
+      <li><a class="nav-item" data-page="language" href="#language">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c3 3 3 16 0 19M12 2.5c-3 3-3 16 0 19"/></svg>
+        <span data-i18n="nav.language"></span></a></li>
+      <li><a class="nav-item" data-page="system" href="#system">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="1.8" fill="var(--surface)"/><circle cx="15" cy="12" r="1.8" fill="var(--surface)"/><circle cx="8" cy="17" r="1.8" fill="var(--surface)"/></svg>
+        <span data-i18n="nav.system"></span></a></li>
+      <li><a class="nav-item" data-page="about" href="#about">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 11v6M12 7.5v.5"/></svg>
+        <span data-i18n="nav.about"></span></a></li>
+    </ul>
+    <div class="nav-foot">
+      <button class="btn btn-secondary btn-block" id="btn-reload" data-i18n="nav.reload"></button>
+    </div>
+  </nav>
+
+  <main class="main" id="main">
+
+    <!-- HOME / waiting screen -->
+    <section class="page active" id="page-home">
+      <div class="hero">
+        <div class="hero-art" aria-hidden="true">
+          <svg viewBox="0 0 320 200" width="100%" height="100%">
+            <defs>
+              <clipPath id="screen-clip"><rect x="110" y="26" width="100" height="148" rx="10"/></clipPath>
+            </defs>
+            <g class="art-waves" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linecap="round">
+              <path d="M86 78a40 40 0 0 0 0 44" class="w1"/>
+              <path d="M72 66a60 60 0 0 0 0 68" class="w2"/>
+              <path d="M234 78a40 40 0 0 1 0 44" class="w1"/>
+              <path d="M248 66a60 60 0 0 1 0 68" class="w2"/>
+            </g>
+            <g class="art-phone">
+              <rect x="104" y="18" width="112" height="164" rx="18" fill="var(--surface)" stroke="var(--art-stroke)" stroke-width="2.5"/>
+              <rect x="110" y="26" width="100" height="148" rx="10" fill="var(--art-screen)"/>
+              <g clip-path="url(#screen-clip)">
+                <rect x="118" y="36" width="20" height="20" rx="5" fill="var(--blue)"/>
+                <rect x="150" y="36" width="20" height="20" rx="5" fill="#1fb05a"/>
+                <rect x="182" y="36" width="20" height="20" rx="5" fill="#ff9f0a"/>
+                <rect x="118" y="68" width="20" height="20" rx="5" fill="#ff375f"/>
+                <rect x="150" y="68" width="20" height="20" rx="5" fill="#5e5ce6"/>
+                <rect x="182" y="68" width="20" height="20" rx="5" fill="#30d158"/>
+                <rect x="118" y="100" width="20" height="20" rx="5" fill="#64d2ff"/>
+                <rect x="150" y="100" width="20" height="20" rx="5" fill="#bf5af2"/>
+                <rect x="182" y="100" width="20" height="20" rx="5" fill="#8e8e93"/>
+                <rect x="118" y="146" width="84" height="18" rx="9" fill="var(--art-stroke)" opacity="0.25"/>
+              </g>
+              <rect x="146" y="22" width="28" height="4" rx="2" fill="var(--art-stroke)" opacity="0.5"/>
+            </g>
+          </svg>
+        </div>
+
+        <h1 class="hero-title" data-i18n="home.title">CarPlay</h1>
+        <p class="hero-sub" data-i18n="home.subtitle"></p>
+
+        <div class="hero-status" id="home-status">
+          <span class="spinner hidden" id="home-spinner"></span>
+          <span class="dot" id="home-dot"></span>
+          <span id="home-status-text" data-i18n="home.waiting"></span>
+        </div>
+
+        <ol class="steps" id="home-steps">
+          <li><span class="step-n">1</span><span data-i18n="home.step1"></span></li>
+          <li><span class="step-n">2</span><span><span data-i18n="home.step2"></span> <span class="pill" id="home-bt">…</span></span></li>
+          <li><span class="step-n">3</span><span data-i18n="home.step3"></span></li>
+        </ol>
+
+        <div class="hero-actions">
+          <button class="btn btn-primary" id="btn-open-carplay" data-i18n="home.open_carplay" hidden></button>
+          <button class="btn btn-secondary" id="btn-qr" data-i18n="home.show_qr"></button>
+        </div>
+
+        <div class="qr-card hidden" id="qr-card">
+          <div id="qr" class="qr"></div>
+          <p class="muted small" data-i18n="home.qr_hint"></p>
+        </div>
+
+        <p class="hero-foot muted small" id="home-foot"></p>
+      </div>
+    </section>
+
+    <!-- DEVICES -->
+    <section class="page" id="page-devices">
+      <h2 class="page-title" data-i18n="nav.devices"></h2>
+      <div class="group">
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="dev.auto"></div><div class="row-hint" data-i18n="dev.auto_hint"></div></div>
+          <label class="switch"><input type="checkbox" id="auto"><span></span></label>
+        </div>
+      </div>
+      <h3 class="group-title" data-i18n="dev.paired"></h3>
+      <div class="group" id="btlist"></div>
+      <p class="muted"><span data-i18n="dev.or_pair"></span> <span class="pill" id="dev-bt"></span></p>
+      <div class="connecting hidden" id="dev-connecting"><span class="spinner"></span><span data-i18n="home.connecting"></span></div>
+    </section>
+
+    <!-- CELLULAR -->
+    <section class="page" id="page-cellular">
+      <h2 class="page-title" data-i18n="nav.cellular"></h2>
+      <div class="group">
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="cell.dial"></div></div>
+          <div class="row-value" id="cell-dial">—</div>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="cell.signal"></div></div>
+          <div class="row-value sig" id="cell-sig">
+            <span class="bars" id="cell-bars"><i></i><i></i><i></i><i></i><i></i></span>
+            <span class="muted small" id="cell-csq"></span>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="cell.carrier"></div></div>
+          <div class="row-value" id="cell-apn">—</div>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title">IMEI</div></div>
+          <div class="row-value mono" id="imei"></div>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title">ICCID</div></div>
+          <div class="row-value mono" id="iccid"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WI-FI -->
+    <section class="page" id="page-wifi">
+      <h2 class="page-title" data-i18n="nav.wifi"></h2>
+      <div class="group">
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="wifi.ssid"></div></div>
+          <div class="row-value" id="wifi-ssid"></div>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="wifi.password"></div></div>
+          <div class="row-value row-inline">
+            <input type="password" id="wifi-psk" class="field field-inline" readonly>
+            <button class="btn btn-secondary btn-sm" id="btn-psk-show" data-i18n="wifi.show"></button>
+            <button class="btn btn-secondary btn-sm" id="btn-psk-change" data-i18n="wifi.change_pw"></button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="wifi.channel"></div><div class="row-hint" data-i18n="wifi.channel_hint"></div></div>
+          <button class="btn btn-secondary btn-sm" id="btn-channel"><span id="wifi-ch">—</span></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- BLUETOOTH -->
+    <section class="page" id="page-bluetooth">
+      <h2 class="page-title" data-i18n="nav.bluetooth"></h2>
+      <div class="group">
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="bt.name"></div></div>
+          <div class="row-value" id="bt-name"></div>
+        </div>
+        <div class="row" id="row-btnet">
+          <div class="row-main"><div class="row-title" data-i18n="bt.modem"></div><div class="row-hint" data-i18n="bt.modem_hint"></div></div>
+          <label class="switch"><input type="checkbox" id="btnet"><span></span></label>
+        </div>
+      </div>
+    </section>
+
+    <!-- DISPLAY -->
+    <section class="page" id="page-display">
+      <h2 class="page-title" data-i18n="nav.display"></h2>
+      <div class="group">
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="disp.theme"></div></div>
+          <div class="seg" id="seg-theme">
+            <button data-v="light" data-i18n="disp.theme_light"></button>
+            <button data-v="dark" data-i18n="disp.theme_dark"></button>
+            <button data-v="auto" data-i18n="disp.theme_auto"></button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="disp.night"></div><div class="row-hint" data-i18n="disp.night_hint"></div></div>
+          <label class="switch"><input type="checkbox" id="night"><span></span></label>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="disp.night_sched"></div></div>
+          <div class="seg" id="seg-night">
+            <button data-v="0" data-i18n="disp.night_off"></button>
+            <button data-v="1" data-i18n="disp.night_18"></button>
+            <button data-v="2" data-i18n="disp.night_19"></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="disp.res"></div><div class="row-hint" data-i18n="disp.res_hint"></div></div>
+          <div class="seg" id="seg-res">
+            <button data-v="sharp" data-i18n="disp.res_sharp"></button>
+            <button data-v="balanced" data-i18n="disp.res_balanced"></button>
+            <button data-v="saver" data-i18n="disp.res_saver"></button>
+            <button data-v="device" data-i18n="disp.res_device"></button>
+          </div>
+        </div>
+        <div class="row hidden" id="row-pixel">
+          <div class="row-main"><div class="row-title" data-i18n="disp.res_device"></div></div>
+          <div class="seg" id="seg-pixel">
+            <button data-v="1" data-i18n="disp.res_hd"></button>
+            <button data-v="2" data-i18n="disp.res_sd"></button>
+            <button data-v="3" data-i18n="disp.res_auto"></button>
+          </div>
+        </div>
+        <div class="row" id="row-uiscale">
+          <div class="row-main"><div class="row-title" data-i18n="disp.ui_scale"></div></div>
+          <div class="seg" id="seg-uiscale">
+            <button data-v="small" data-i18n="disp.ui_small"></button>
+            <button data-v="normal" data-i18n="disp.ui_normal"></button>
+            <button data-v="large" data-i18n="disp.ui_large"></button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="disp.session"></div></div>
+          <div class="row-value mono" id="session-info">—</div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="disp.fps"></div></div>
+          <div class="seg" id="seg-fps">
+            <button data-v="0" data-i18n="disp.fps_standard"></button>
+            <button data-v="1" data-i18n="disp.fps_smooth"></button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="disp.mode"></div><div class="row-hint" data-i18n="disp.mode_hint"></div></div>
+          <div class="seg" id="seg-mode">
+            <button data-v="0" data-i18n="disp.mode_picture"></button>
+            <button data-v="1" data-i18n="disp.mode_video"></button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="disp.fit"></div></div>
+          <div class="seg" id="seg-fit">
+            <button data-v="contain" data-i18n="disp.fit_contain"></button>
+            <button data-v="cover" data-i18n="disp.fit_cover"></button>
+            <button data-v="stretch" data-i18n="disp.fit_stretch"></button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="disp.stats"></div><div class="row-hint" data-i18n="disp.stats_hint"></div></div>
+          <label class="switch"><input type="checkbox" id="stats"><span></span></label>
+        </div>
+      </div>
+    </section>
+
+    <!-- LANGUAGE -->
+    <section class="page" id="page-language">
+      <h2 class="page-title" data-i18n="lang.title"></h2>
+      <div class="group lang-grid" id="lang-list"></div>
+      <p class="muted small" data-i18n="lang.hint"></p>
+    </section>
+
+    <!-- SYSTEM -->
+    <section class="page" id="page-system">
+      <h2 class="page-title" data-i18n="nav.system"></h2>
+      <div class="group">
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="sys.online"></div><div class="row-hint" data-i18n="sys.online_hint"></div></div>
+          <label class="switch"><input type="checkbox" id="online"><span></span></label>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="sys.driver"></div></div>
+          <div class="seg" id="seg-driver">
+            <button data-v="0" data-i18n="sys.lhd"></button>
+            <button data-v="1" data-i18n="sys.rhd"></button>
+          </div>
+        </div>
+      </div>
+      <div class="group">
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="sys.car_name"></div><div class="row-hint" data-i18n="sys.car_name_hint"></div></div>
+          <input type="text" id="car-name" class="field" maxlength="12" placeholder="Auto">
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="sys.icon"></div></div>
+          <div class="seg" id="seg-icon">
+            <button data-v="0" data-i18n="sys.icon_default"></button>
+            <button data-v="1" data-i18n="sys.icon_custom"></button>
+          </div>
+        </div>
+        <div class="icon-grid hidden" id="icon-grid"></div>
+        <p class="muted small hidden" id="tesla-tm" data-i18n="sys.tesla_tm"></p>
+      </div>
+      <div class="group">
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="sys.mic_test"></div></div>
+          <a class="btn btn-secondary btn-sm" href="/mic.html" data-i18n="sys.open_mic_test"></a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="page" id="page-about">
+      <h2 class="page-title" data-i18n="nav.about"></h2>
+      <div class="group">
+        <div class="row" id="row-update">
+          <div class="row-main"><div class="row-title" data-i18n="about.update"></div><div class="row-hint" id="about-sw"></div></div>
+          <button class="btn btn-primary btn-sm" id="btn-update" data-i18n="about.check"></button>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="about.update_url"></div><div class="row-hint" data-i18n="about.update_url_hint"></div></div>
+          <input type="url" id="update-url" class="field field-wide" placeholder="https://…">
+        </div>
+      </div>
+      <div class="group">
+        <div class="row"><div class="row-main"><div class="row-title" data-i18n="about.model"></div></div><div class="row-value" id="about-model"></div></div>
+        <div class="row"><div class="row-main"><div class="row-title" data-i18n="about.fw"></div></div><div class="row-value mono" id="about-fw"></div></div>
+        <div class="row"><div class="row-main"><div class="row-title" data-i18n="about.hw"></div></div><div class="row-value mono" id="about-hw"><span id="hw-short"></span><span id="hw-full" class="hidden"></span></div></div>
+        <div class="row"><div class="row-main"><div class="row-title" data-i18n="about.uuid"></div></div><div class="row-value mono" id="about-uuid"></div></div>
+      </div>
+      <div class="group">
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="about.reset"></div></div>
+          <button class="btn btn-danger btn-sm" id="btn-reset" data-i18n="about.reset_btn"></button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="dialog" class="dialog-backdrop hidden"><div class="dialog" id="dialog-box" role="dialog"></div></div>
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/qrcode.min.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/protocol.js"></script>
+<script src="js/video.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
