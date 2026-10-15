@@ -649,6 +649,9 @@
   }
 
   function onLinkMsg(j) {
+    // The adapter can push {link,phone} before the init JSON; the transport (MJPEG vs
+    // H.264) is only known after init, which calls switchVideo(j.link) itself.
+    if (!state.init) { state.phone = !!j.phone; return; }
     if (state.linking) {
       if (j.link > 0 || !j.phone) setLinking(false);
     } else if (j.phone && j.link < 1) {
