@@ -695,10 +695,19 @@
 
   function bindTouch() {
     var stage = $('stage');
-    var down = false, pendingMove = null, raf = 0;
+    var down = false, pendingMove = null, raf = 0, lastMove = 0;
+    // Moves go out right away (the iPhone derives scroll velocity from their timing);
+    // only when two arrive within 4 ms is the second deferred to the next frame.
+    var MOVE_GAP = 4;
     function flushMove() {
       raf = 0;
-      if (pendingMove) { link.sendTouch(2, pendingMove.x, pendingMove.y); pendingMove = null; }
+      if (pendingMove) { lastMove = performance.now(); link.sendTouch(2, pendingMove.x, pendingMove.y); pendingMove = null; }
+    }
+    function queueMove(p) {
+      var now = performance.now();
+      if (now - lastMove >= MOVE_GAP) { lastMove = now; pendingMove = null; link.sendTouch(2, p.x, p.y); return; }
+      pendingMove = p;
+      if (!raf) raf = requestAnimationFrame(flushMove);
     }
     function pos(e) { return presenter.toPerMille(e.clientX, e.clientY); }
     if (window.PointerEvent) {
@@ -714,13 +723,13 @@
       stage.addEventListener('pointermove', function (e) {
         if (!down) return;
         var p = pos(e); if (!p) return;
-        pendingMove = p;
-        if (!raf) raf = requestAnimationFrame(flushMove);
+        queueMove(p);
       });
       function up(e) {
         if (!down) return;
         down = false;
-        if (raf) { cancelAnimationFrame(raf); raf = 0; pendingMove = null; }
+        if (raf) { cancelAnimationFrame(raf); raf = 0; }
+        if (pendingMove) { link.sendTouch(2, pendingMove.x, pendingMove.y); pendingMove = null; }
         var p = pos(e); if (p) link.sendTouch(1, p.x, p.y);
       }
       stage.addEventListener('pointerup', up);
@@ -731,13 +740,13 @@
         var p = pos(e.touches[0]); if (!p) return; down = true; link.sendTouch(0, p.x, p.y); e.preventDefault();
       }, { passive: false });
       stage.addEventListener('touchmove', function (e) {
-        if (!down) return; var p = pos(e.touches[0]); if (!p) return; pendingMove = p; if (!raf) raf = requestAnimationFrame(flushMove);
+        if (!down) return; var p = pos(e.touches[0]); if (!p) return; queueMove(p);
       }, { passive: true });
       stage.addEventListener('touchend', function (e) {
         if (!down) return; down = false; var p = pos(e.changedTouches[0]); if (p) link.sendTouch(1, p.x, p.y);
       });
       stage.addEventListener('mousedown', function (e) { var p = pos(e); if (!p) return; down = true; link.sendTouch(0, p.x, p.y); });
-      stage.addEventListener('mousemove', function (e) { if (!down) return; var p = pos(e); if (p) { pendingMove = p; if (!raf) raf = requestAnimationFrame(flushMove); } });
+      stage.addEventListener('mousemove', function (e) { if (!down) return; var p = pos(e); if (p) queueMove(p); });
       stage.addEventListener('mouseup', function (e) { if (!down) return; down = false; var p = pos(e); if (p) link.sendTouch(1, p.x, p.y); });
     }
     stage.addEventListener('dragstart', function (e) { e.preventDefault(); });
