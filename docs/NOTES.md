@@ -202,3 +202,13 @@ stack lives in the closed `gocsdk`/`lylinkapp` binaries (BT controller UART rate
 nothing on the web side changes its speed. Levers that do exist: the `btnet` setting (type 7
 key 8: 1 off / 2 on) and `app/udhcpd.conf` (router / DNS / static‑route options given to
 the car) — both untested against Tesla's connectivity checks.
+
+## Frame rate during motion (bench, 2026-10-15)
+
+Synthetic 1.2 s swipes on the CarPlay home screen (headless Chrome at 773×601, H.264 path,
+session 768×608): the adapter delivers 25–33 frames/s at 6–10 Mbit/s while the content
+moves, decode 1.5–6 ms per frame, 0 dropped; painted ≈ received. The `fps` setting (type 7
+key 9, "standard"/"smooth") made no measurable difference — the ~30 fps ceiling is the
+encoded stream itself, so scrolling cannot look like a native 60 Hz screen. What the page
+controls is touch timing: moves were coalesced to one per animation frame until 26101501;
+since 26101502 they are forwarded as they arrive (iOS derives scroll velocity from them).
