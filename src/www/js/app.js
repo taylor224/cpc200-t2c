@@ -10,8 +10,12 @@
     MAX_SESSION_AREA: 1376 * 1072,
     MAX_W: 1920,
     MAX_H: 1200,
-    // CarPlay derives its UI scale from pixels-per-millimetre of the reported screen.
-    PX_PER_MM: { small: 6.4, normal: 5.2, large: 4.2 },
+    // The iPhone draws CarPlay at a fixed pixel size whatever session size and physical size the
+    // adapter reports (measured 640-1184 px wide, 60-255 mm: icons always ~120 px). The UI only
+    // looks bigger or smaller on the Tesla screen through the picture being enlarged more or less,
+    // so "UI size" scales the session pixel count. The physical size is just kept plausible.
+    UI_SCALE: { small: 1.25, normal: 1, large: 0.8 },
+    PX_PER_MM: 5.2,
     RESIZE_RELOAD_PX: 48,
     // Name of the car's own app in the CarPlay app grid (the adapter's built-in default is "Auto").
     CAR_NAME: 'Carlinkit'
@@ -210,8 +214,10 @@
     if (state.vid !== want) {
       link.setKey(KEY.MODE, want ? 1 : 0);
       state.vid = want;
-      // The adapter picks the pipeline when the iPhone's video starts: an active session has to be restarted.
-      if (state.link >= 1 || userAction) restartSession();
+      // The adapter picks the pipeline when the iPhone's video starts: an active session has to be
+      // restarted — unless applySession() is about to do that anyway by leaving Auto.
+      var leavingAuto = state.pixel === 3 && !!computeSession() && !store.get('sessAuto', false);
+      if ((state.link >= 1 || userAction) && !leavingAuto) restartSession();
     }
   }
 
@@ -304,15 +310,15 @@
       case 'device': return null;
       default: s = 1;
     }
-    var w = vw * s, h = vh * s;
+    var k = CONFIG.UI_SCALE[prefs.uiScale] || 1;
+    var w = vw * s * k, h = vh * s * k;
     var area = w * h;
     if (area > CONFIG.MAX_SESSION_AREA) { var k = Math.sqrt(CONFIG.MAX_SESSION_AREA / area); w *= k; h *= k; }
     if (w > CONFIG.MAX_W) { h = h * CONFIG.MAX_W / w; w = CONFIG.MAX_W; }
     if (h > CONFIG.MAX_H) { w = w * CONFIG.MAX_H / h; h = CONFIG.MAX_H; }
     w = Math.max(320, Math.round(w / 16) * 16);
     h = Math.max(240, Math.round(h / 16) * 16);
-    var ppm = CONFIG.PX_PER_MM[prefs.uiScale] || CONFIG.PX_PER_MM.normal;
-    var mmw = w / ppm, mmh = h / ppm;
+    var mmw = w / CONFIG.PX_PER_MM, mmh = h / CONFIG.PX_PER_MM;
     if (mmw > 255 || mmh > 255) { var k2 = 255 / Math.max(mmw, mmh); mmw *= k2; mmh *= k2; }
     return { w: w, h: h, mmw: Math.round(mmw), mmh: Math.round(mmh) };
   }
@@ -329,9 +335,18 @@
   /** Restart the CarPlay session. lylinkui does that on any change of the pixel setting while a
    *  type-11 override keeps the size, so toggling between two presets is a plain restart. In the
    *  Auto flows (adapter presets, or firmware that ignores the override outside Auto) a reload
-   *  does it through the hello instead. */
+   *  does it through the hello instead.
+   *  A restart kills and respawns lylinkapp and the iPhone reconnects: a dozen of them in a few
+   *  minutes took the adapter's hotspot down for a minute (bench, 2026-10-15). Restarts are
+   *  therefore at least RESTART_GAP apart; a request inside the gap is carried out when it ends,
+   *  with whatever override was sent last. */
+  var RESTART_GAP = 10000, restartTimer = 0;
   function restartSession() {
-    if (Date.now() - state.sessRestartAt < 1000) return;      // one restart per settings pass
+    var wait = RESTART_GAP - (Date.now() - state.sessRestartAt);
+    if (wait > 0) {
+      if (!restartTimer) restartTimer = setTimeout(function () { restartTimer = 0; restartSession(); }, wait);
+      return;
+    }
     if (prefs.res === 'device' || store.get('sessAuto', false)) {
       state.sessRestartAt = Date.now();
       setTimeout(reload, 400);

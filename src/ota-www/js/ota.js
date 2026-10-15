@@ -37,6 +37,7 @@
     'sw.done': 'Update complete', 'sw.fail': 'Update failed', 'sw.rejected': 'The adapter rejected the file',
     'q.reboot': 'Reboot the adapter now?', 'q.reset': 'Reset all settings?\nBluetooth pairings and the Wi‑Fi password are erased and the adapter reboots.',
     'q.channel': 'Switch the hotspot to channel {ch}?', 'q.install': 'Install version {v}?',
+    'q.wifi': 'Change the Wi‑Fi password to “{psk}”? The adapter reboots and the car and phone must join with the new password.',
     'msg.rebooting': 'Rebooting… this page reconnects by itself', 'msg.back': 'Adapter is back online', 'msg.offline': 'Adapter not reachable — join its Wi‑Fi',
     'msg.saved': 'Saved', 'msg.fail': 'Failed', 'msg.reset': 'Resetting… the hotspot name and password return to their defaults',
     'msg.psk_short': 'Password must be 8–11 characters', 'msg.psk_chars': 'Unsupported character in password'
@@ -64,6 +65,7 @@
     'sw.done': '업데이트 완료', 'sw.fail': '업데이트 실패', 'sw.rejected': '어댑터가 파일을 거부했습니다',
     'q.reboot': '어댑터를 지금 재부팅할까요?', 'q.reset': '모든 설정을 초기화할까요?\n블루투스 페어링과 Wi‑Fi 비밀번호가 지워지고 어댑터가 재부팅됩니다.',
     'q.channel': '핫스팟을 {ch} 채널로 바꿀까요?', 'q.install': '버전 {v}을(를) 설치할까요?',
+    'q.wifi': 'Wi‑Fi 비밀번호를 “{psk}”(으)로 바꿀까요? 어댑터가 재부팅되고 차량과 폰을 새 비밀번호로 다시 연결해야 합니다.',
     'msg.rebooting': '재부팅 중… 이 페이지가 자동으로 다시 연결됩니다', 'msg.back': '어댑터가 다시 켜졌습니다', 'msg.offline': '어댑터에 연결할 수 없습니다 — 어댑터 Wi‑Fi에 접속하세요',
     'msg.saved': '저장됨', 'msg.fail': '실패', 'msg.reset': '초기화 중… 핫스팟 이름과 비밀번호가 기본값으로 돌아갑니다',
     'msg.psk_short': '비밀번호는 8–11자여야 합니다', 'msg.psk_chars': '비밀번호에 쓸 수 없는 문자가 있습니다'
@@ -91,6 +93,7 @@
     'sw.done': '更新完了', 'sw.fail': '更新に失敗しました', 'sw.rejected': 'アダプターがファイルを拒否しました',
     'q.reboot': 'アダプターを今すぐ再起動しますか？', 'q.reset': 'すべての設定を初期化しますか？\nBluetooth のペアリングと Wi‑Fi パスワードが消去され、アダプターが再起動します。',
     'q.channel': 'ホットスポットをチャンネル {ch} に切り替えますか？', 'q.install': 'バージョン {v} をインストールしますか？',
+    'q.wifi': 'Wi‑Fi パスワードを「{psk}」に変更しますか？ アダプターが再起動し、車とスマートフォンは新しいパスワードで接続し直す必要があります。',
     'msg.rebooting': '再起動中… このページは自動で再接続します', 'msg.back': 'アダプターがオンラインに戻りました', 'msg.offline': 'アダプターに接続できません — アダプターの Wi‑Fi に接続してください',
     'msg.saved': '保存しました', 'msg.fail': '失敗', 'msg.reset': '初期化中… ホットスポット名とパスワードは既定値に戻ります',
     'msg.psk_short': 'パスワードは 8〜11 文字です', 'msg.psk_chars': 'パスワードに使用できない文字があります'
@@ -118,6 +121,7 @@
     'sw.done': '更新完成', 'sw.fail': '更新失败', 'sw.rejected': '适配器拒绝了该文件',
     'q.reboot': '现在重启适配器？', 'q.reset': '重置所有设置？\n蓝牙配对和 Wi‑Fi 密码将被清除，适配器将重启。',
     'q.channel': '将热点切换到信道 {ch}？', 'q.install': '安装版本 {v}？',
+    'q.wifi': '将 Wi‑Fi 密码改为“{psk}”？适配器会重启，车辆和手机需用新密码重新连接。',
     'msg.rebooting': '重启中… 本页面会自动重新连接', 'msg.back': '适配器已恢复在线', 'msg.offline': '无法连接适配器 — 请加入其 Wi‑Fi',
     'msg.saved': '已保存', 'msg.fail': '失败', 'msg.reset': '重置中… 热点名称和密码恢复为默认值',
     'msg.psk_short': '密码须为 8–11 个字符', 'msg.psk_chars': '密码包含不支持的字符'
@@ -145,6 +149,7 @@
     'sw.done': '更新完成', 'sw.fail': '更新失敗', 'sw.rejected': '轉接器拒絕了該檔案',
     'q.reboot': '現在重新啟動轉接器？', 'q.reset': '重設所有設定？\n藍牙配對與 Wi‑Fi 密碼將被清除，轉接器將重新啟動。',
     'q.channel': '將熱點切換到頻道 {ch}？', 'q.install': '安裝版本 {v}？',
+    'q.wifi': '將 Wi‑Fi 密碼改為「{psk}」？轉接器會重新啟動，車輛和手機需以新密碼重新連線。',
     'msg.rebooting': '重新啟動中… 本頁面會自動重新連線', 'msg.back': '轉接器已恢復連線', 'msg.offline': '無法連線轉接器 — 請加入其 Wi‑Fi',
     'msg.saved': '已儲存', 'msg.fail': '失敗', 'msg.reset': '重設中… 熱點名稱與密碼恢復為預設值',
     'msg.psk_short': '密碼須為 8–11 個字元', 'msg.psk_chars': '密碼包含不支援的字元'
@@ -479,10 +484,13 @@
       // sent verbatim, so the character set excludes anything that would need escaping.
       if (psk.length < 8 || psk.length > 11) { toast(t('msg.psk_short')); return; }
       if (!/^[A-Za-z0-9!@#$^*()_.,:;?~-]+$/.test(psk)) { toast(t('msg.psk_chars'), 4000); return; }
-      fetch('/cgi-bin/t2c.cgi?a=wifi', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'psk=' + psk })
-        .then(function (r) { return r.json(); })
-        .then(function (j) { if (j.code !== 0) throw new Error(j.msg || ('code ' + j.code)); waitForReboot(t('msg.rebooting')); })
-        .catch(function (e) { toast(t('msg.fail') + ' (' + e.message + ')', 4000); });
+      confirmBox(t('q.wifi', { psk: psk })).then(function (ok) {
+        if (!ok) return;
+        fetch('/cgi-bin/t2c.cgi?a=wifi', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'psk=' + psk })
+          .then(function (r) { return r.json(); })
+          .then(function (j) { if (j.code !== 0) throw new Error(j.msg || ('code ' + j.code)); waitForReboot(t('msg.rebooting')); })
+          .catch(function (e) { toast(t('msg.fail') + ' (' + e.message + ')', 4000); });
+      });
     };
     $('btn-name-save').onclick = function () {
       var name = $('in-name').value;

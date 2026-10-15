@@ -256,7 +256,7 @@
           </div>
         </div>
         <div class="row" id="row-uiscale">
-          <div class="row-main"><div class="row-title" data-i18n="disp.ui_scale"></div></div>
+          <div class="row-main"><div class="row-title" data-i18n="disp.ui_scale"></div><div class="row-hint" data-i18n="disp.ui_hint"></div></div>
           <div class="seg" id="seg-uiscale">
             <button data-v="small" data-i18n="disp.ui_small"></button>
             <button data-v="normal" data-i18n="disp.ui_normal"></button>

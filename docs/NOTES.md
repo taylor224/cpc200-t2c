@@ -69,8 +69,14 @@ with libwebsockets' MIME table (svg/json/woff2 included).
 | 3 (Auto) | 800×800 in picture mode, 800×(800·h/w) in video mode | nav/5, clipped below the pixel size |
 
 When a type‑11 override is present it replaces all of the above. The iPhone renders at
-the requested pixel size and derives its UI scale from pixels‑per‑millimetre, which is
-why the UI exposes *CarPlay UI size* (≈6.4 / 5.2 / 4.2 px/mm). The session is
+the requested pixel size. It does **not** derive a UI scale from the physical size: at
+768×608 the physical size was varied from 60×48 to 255×202 mm (lylinkapp logged each as
+`display physical`) and the decoded frames were pixel‑identical; and at 768, 1024, 1088 and
+1184 px wide the CarPlay icons are always ~120 px (the @2x layout, more columns at larger
+sizes). So on this adapter the UI only looks bigger or smaller through the picture being
+enlarged more or less on the Tesla screen, and the page's *CarPlay UI size* scales the
+session pixel count (×1.25 / ×1 / ×0.8 on top of the picture‑size preset; the mm sent are
+just w/5.2, h/5.2). The session is
 (re)started on every hello when `pixel == 3`, on any pixel/driver/fps change, and on
 phone connect.
 
@@ -84,6 +90,12 @@ reboot the first session can come up at the preset size; the page compares the s
 picture that arrives with what it asked for (`verifySession()`), restarts once if they differ,
 and if they still differ falls back to the old Auto flow (`localStorage t2c.sessAuto`, cleared
 when the user changes the size settings).
+
+Restarts are expensive: lylinkui kills and respawns lylinkapp, the iPhone reconnects, the
+Bluetooth PAN drops. About a dozen of them within six minutes (two size‑mapping runs) left the
+hotspot unreachable for ~70 s (no ping, nothing on 80/443, single core at load > 2); it came
+back by itself without a reboot. The page therefore spaces restarts at least 10 s apart and
+carries out a request made inside that window when it ends, with the override sent last.
 
 Checked on the device (2026-10-15, direct WebSocket probe and the page itself): the override
 is honoured with pixel 2, 0 and 3 alike; it survives in RAM across restarts and is applied on a
@@ -381,6 +393,9 @@ could go wrong over a long drive were event paths, fixed after 26101504:
   (while the phone has internet it drops every query that is not in its table). Turning that
   drop into REFUSED would let a resolver fail over at once, but the stock REFUSED path sits
   behind the `tesla` catch‑all, so it needs its own cave — not done.
+- 5‑minute soak of the page at 1184×912 (*High resolution*) with swipes: 6–10 Mbit/s, decode
+  4.7–7.8 ms, 0 dropped, JS heap flat. Every action on the phone page that reboots or wipes
+  the adapter (reset, reboot, channel, name, password, install) goes through the confirm box.
 - The phone page shows memory *used* (`MemTotal − MemAvailable`) and a CPU busy share
   (`t2c.cgi?a=info` samples `/proc/stat` twice, 0.3 s apart, `cpu_pct`; `cgi` is 4). The
   adapter runs at load 2–2.8 on its single core while a session is up.
