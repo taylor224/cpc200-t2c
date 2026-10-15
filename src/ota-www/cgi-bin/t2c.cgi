@@ -82,6 +82,7 @@ cat)
     env)             cmd='fw_printenv' ;;
     ifconfig)        cmd='ifconfig' ;;
     bt_conf)         f=/mnt/UDISK/bt_conf.ini ;;
+    dns)             cmd='for n in carplay.lan tespush.com tesla.com; do echo "## $n"; nslookup "$n" 127.0.0.1 2>&1 | tail -n +3; done' ;;
     private)         cmd="tr -c '[:print:]\n' '\n' < /dev/mtdblock6 | grep -v '^$' | head -300" ;;
     *) printf 'HTTP/1.0 404 Not Found\r\nContent-Type: text/plain\r\n\r\nunknown file\n'; exit 0 ;;
   esac

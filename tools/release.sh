@@ -23,8 +23,13 @@ ASSET="T2C-tesla-ui-$V.img"
 URL="https://raw.githubusercontent.com/$REPO/releases/$BRANCH/$ASSET"
 RELEASE_PAGE="https://github.com/$REPO/releases/tag/v$V"
 
-echo "== build $IMG"
-T2C_VERSION="$V" tools/build.sh "$BASE" "$IMG" | tail -3
+if [ -f "$IMG" ] && [ "${REBUILD:-0}" != 1 ]; then
+  echo "== using existing $IMG (the image that was tested; REBUILD=1 to rebuild)"
+  tools/verify.sh "$IMG" | tail -1
+else
+  echo "== build $IMG"
+  T2C_VERSION="$V" tools/build.sh "$BASE" "$IMG" | tail -3
+fi
 SHA=$(shasum -a 256 "$IMG" | cut -d' ' -f1)
 SIZE=$(stat -f %z "$IMG" 2>/dev/null || stat -c %s "$IMG")
 

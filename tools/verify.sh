@@ -17,6 +17,7 @@ for f in app/www/index.in app/www/index.html app/www/js/app.js app/www/js/protoc
   [ -f "$TMP/fs/$f" ] || { echo "FAIL: $f not in image" >&2; exit 1; }
 done
 grep -q '|' "$TMP/fs/app/www/index.in" && { echo "FAIL: index.in contains '|'" >&2; exit 1; }
+python3 tools/patch_lylinkui.py "$TMP/fs/app/lylinkui" | grep -q 'already patched' || { echo "FAIL: app/lylinkui is not the patched build" >&2; exit 1; }
 # the stock OTA CGI must be the shipped binary (ELF), the page ours
 head -c 4 "$TMP/fs/ota/www/cgi-bin/index.cgi" | grep -q 'ELF' || { echo "FAIL: ota/www/cgi-bin/index.cgi is not the stock binary" >&2; exit 1; }
 grep -q 't2c.cgi' "$TMP/fs/ota/www/index.html" || { echo "FAIL: new phone page not in image" >&2; exit 1; }

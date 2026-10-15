@@ -24,7 +24,8 @@ The easiest way is the installer page: **https://taylor224.github.io/cpc200-t2c/
    the firmware and reboots again (its Wi‑Fi disappears for ~30 s in the middle).
 
 Afterwards `http://192.168.3.1` is the new settings page and the car browser shows the new
-CarPlay page. Later updates are one tap: in the car *Settings → About → Check for updates*,
+CarPlay page at `tespush.com` or `carplay.lan/` (the adapter's built‑in DNS answers that
+name; type the trailing slash the first time so the browser does not run a search). Later updates are one tap: in the car *Settings → About → Check for updates*,
 or on the phone page *Software → Check for updates*; both read `updates/1508/version.json`
 from this repository and install the image linked there.
 

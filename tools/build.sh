@@ -59,6 +59,10 @@ EOF
 find "$WORK/customer/app/www" -type f -exec chmod 755 {} +   # match original image (all 0755)
 find "$WORK/customer/app/www" -type d -exec chmod 755 {} +
 
+echo "== patch app/lylinkui (built-in DNS answers carplay.lan)"
+python3 tools/patch_lylinkui.py "$WORK/customer/app/lylinkui"
+chmod 755 "$WORK/customer/app/lylinkui"
+
 if [ -n "${T2C_VERSION:-}" ]; then
   echo "== version: $T2C_VERSION (app/system.json)"
   [[ "$T2C_VERSION" =~ ^[0-9]{8}$ ]] || { echo "T2C_VERSION must be 8 digits (YYMMDDNN)" >&2; exit 1; }

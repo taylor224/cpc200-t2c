@@ -212,3 +212,26 @@ key 9, "standard"/"smooth") made no measurable difference — the ~30 fps ceilin
 encoded stream itself, so scrolling cannot look like a native 60 Hz screen. What the page
 controls is touch timing: moves were coalesced to one per animation frame until 26101501;
 since 26101502 they are forwarded as they arrive (iOS derives scroll velocity from them).
+
+## Built-in DNS (`dnsd` in lylinkui) and `carplay.lan`
+
+`lylinkui` runs a tiny DNS responder on UDP 53 (`process_request` 0x20a90). Stock rules:
+names from a static table at 0x3d0a8 (`tespush.cn`, `tespush.com`, `www.tespush.cn`,
+`www.tespush.com`; branch 1508 uses 6 entries, two of them duplicates) are answered with
+the Tesla‑UI address (TTL 121); any name with a label containing `tesla` is answered with
+the same address (TTL 0, presumably the car's connectivity check while offline); the rest
+gets REFUSED. `dnsd_disable(1)` is called once `data.carlinkit.com` resolves (phone
+internet up); from then on every query is dropped.
+
+`tools/patch_lylinkui.py` (applied by `tools/build.sh`, checked by `tools/verify.sh`)
+replaces one duplicate entry with `carplay.lan`, keeps answering table names while
+disabled, and leaves everything else exactly as before (online: drop, including the
+`tesla` catch‑all). It reuses the per‑query debug log call as a code cave and its format
+string for the new name, and refuses to run on any lylinkui other than SHA‑256
+`37ce2c3a…` (26090414). lylinkui also serves the UI and the WebSocket over plain HTTP on
+`101.200.208.6:80` for any host name except `tespush.com` (which gets a 301 to HTTPS), so
+`http://carplay.lan/` opens the CarPlay page. Whether the car resolves `carplay.lan`
+while the phone has internet depends on its resolver also asking the adapter (third DNS
+server in DHCP) when 8.8.8.8 says NXDOMAIN; offline it always works. Names ending in a
+number (`carplay.111`) are invalid URLs, and `.play`/`.app` are HSTS‑preloaded in
+Chromium (forced HTTPS, no way past the certificate error).
