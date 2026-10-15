@@ -4,7 +4,8 @@
 #   tools/flash.sh IMAGE.img            # checks only (version, partition size, memory, image)
 #   tools/flash.sh IMAGE.img --yes      # checks, then upload and wait for the adapter to return
 #
-# Environment: T2C_HOST (default 192.168.3.1). Logs go to work/flash-<timestamp>/.
+# Environment: T2C_HOST (default 192.168.3.1); T2C_SSID + T2C_PSK let the script rejoin the
+# adapter's Wi-Fi on macOS if the Mac roams away while the adapter reboots. Logs go to work/flash-<timestamp>/.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 IMG="${1:?usage: flash.sh IMAGE.img [--yes]}"
@@ -97,6 +98,9 @@ while :; do
     if [ $DOWN = 1 ]; then echo "   back online after $(( $(date +%s) - T0 ))s"; break; fi
   else
     if [ $DOWN = 0 ]; then echo "   adapter went offline after $(( $(date +%s) - T0 ))s (installing)"; DOWN=1; fi
+    if [ -n "${T2C_SSID:-}" ] && command -v networksetup >/dev/null; then
+      networksetup -setairportnetwork en0 "$T2C_SSID" "${T2C_PSK:-}" >/dev/null 2>&1 || true
+    fi
   fi
   [ $(( $(date +%s) - T0 )) -gt 900 ] && fail "no answer for 15 minutes; power-cycle the adapter and check $BASE?id=host manually"
   sleep 3
