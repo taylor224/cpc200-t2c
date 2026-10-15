@@ -12,6 +12,7 @@ cd "$(dirname "$0")/.."
 V="${1:?usage: release.sh YYMMDDNN [NOTES.md] [BASE_IMG]}"
 NOTES="${2:-}"
 BASE="${3:-}"
+if [ -z "$BASE" ]; then if [ -f test.img ]; then BASE=test.img; elif [ -f update.img ]; then BASE=update.img; else echo "no base image" >&2; exit 1; fi; fi
 [[ "$V" =~ ^[0-9]{8}$ ]] || { echo "version must be 8 digits (YYMMDDNN)" >&2; exit 1; }
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 BRANCH=1508
@@ -23,7 +24,7 @@ URL="https://raw.githubusercontent.com/$REPO/releases/$BRANCH/$ASSET"
 RELEASE_PAGE="https://github.com/$REPO/releases/tag/v$V"
 
 echo "== build $IMG"
-T2C_VERSION="$V" tools/build.sh ${BASE:+"$BASE"} "$IMG" | tail -3
+T2C_VERSION="$V" tools/build.sh "$BASE" "$IMG" | tail -3
 SHA=$(shasum -a 256 "$IMG" | cut -d' ' -f1)
 SIZE=$(stat -f %z "$IMG" 2>/dev/null || stat -c %s "$IMG")
 
@@ -63,5 +64,11 @@ else
   gh release create "v$V" --target main --title "T2C Tesla UI $V" --notes "T2C Tesla UI build $V. SHA-256 $SHA, $SIZE bytes."
 fi
 # upload separately so a slow link can be retried without recreating the release
-for i in 1 2 3; do gh release upload "v$V" "$IMG#$ASSET" --clobber && break; echo "upload failed, retry $i"; sleep 5; done
+RID=$(gh api "repos/$REPO/releases/tags/v$V" -q .id)
+for i in 1 2 3; do
+  curl -sS -m 1800 --limit-rate 45k -X POST -H "Authorization: Bearer $(gh auth token)" -H "Accept: application/vnd.github+json" \
+    -H "Content-Type: application/octet-stream" --data-binary "@$IMG" -o /dev/null -w "   asset upload http=%{http_code}\n" \
+    "https://uploads.github.com/repos/$REPO/releases/$RID/assets?name=$ASSET" && gh release view "v$V" --json assets -q '.assets[].name' | grep -q "$ASSET" && break
+  echo "asset upload failed, retry $i"; sleep 5
+done
 echo "== done: $URL"
