@@ -176,3 +176,15 @@ lylinkui reloads it (its in‑memory copy would otherwise overwrite the file lat
 The phone page's helper CGI runs as root under busybox httpd; `reboot` works from there
 (the adapter drops off after ~7 s). The Mac tends to roam away from `AutoKit_051E` while
 the hotspot is down, hence the rejoin loop in `tools/flash.sh` (`T2C_SSID`/`T2C_PSK`).
+
+## Update hosting (2026-10-15)
+
+Both pages fetch `<base>/1508/version.json` and then `url` with a plain browser `fetch`,
+so every hop needs `Access-Control-Allow-Origin`. raw.githubusercontent.com sends `*`
+(cached ~5 min per path); GitHub release-asset downloads (`github.com/…/releases/download`
+→ `release-assets.githubusercontent.com`) send none and are therefore unusable from the
+page. Images for the updater live on the orphan `releases` branch (`1508/<file>.img`,
+raw URL), release assets stay for manual download. `tools/release.sh` does the whole
+cycle. The Mac's internet on the adapter's Wi‑Fi goes through the iPhone's Bluetooth PAN
+(~40–70 KB/s, stalls); GitHub's asset upload endpoint times out on it unless the upload
+is rate‑limited (`curl --limit-rate 45k` worked), git push over SSH was fine.
