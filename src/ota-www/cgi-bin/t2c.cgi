@@ -11,6 +11,7 @@
 #                         (/mnt/UDISK/lycfg.txt, 12-byte field at offset 8 = max 11 chars,
 #                         exactly what the Tesla page's type-9 message writes) and reboot.
 #                         The network name is derived by the firmware and cannot be set.
+#   POST ?a=channel       body "ch=<n>": hotspot channel (byte 5 of lycfg.txt) and reboot
 
 A=''; F=''
 OLDIFS=$IFS; IFS='&'
@@ -108,6 +109,20 @@ wifi)
   mv "$CFG.new" "$CFG" && sync
   # Also patch the live hostapd config so the file on disk and in RAM agree; the reboot applies it.
   [ -f $HOSTAPD ] && sed -i "s/^wpa_passphrase=.*/wpa_passphrase=$psk/" $HOSTAPD 2>/dev/null
+  printf '{"code":0}'
+  ( sleep 2; sync; reboot || /sbin/reboot || busybox reboot ) </dev/null >/dev/null 2>&1 &
+  ;;
+channel)
+  CFG=/mnt/UDISK/lycfg.txt
+  body=''
+  [ "${REQUEST_METHOD:-GET}" = POST ] && [ "${CONTENT_LENGTH:-0}" -gt 0 ] && [ "${CONTENT_LENGTH:-0}" -le 16 ] && body=$(head -c "$CONTENT_LENGTH" | tr -d '\r\n')
+  ch=${body#ch=}
+  json_hdr
+  case "$ch" in 6|36|40|44|48|149|153|157|161|165) ;; *) printf '{"code":4,"msg":"unsupported channel"}'; exit 0 ;; esac
+  if [ ! -f "$CFG" ] || [ "$(wc -c < "$CFG" | tr -d ' ')" -ne 556 ]; then printf '{"code":6,"msg":"config file missing; set a password from the Tesla screen first"}'; exit 0; fi
+  { head -c 5 "$CFG"; printf "\\$(printf '%03o' "$ch")"; tail -c +7 "$CFG"; } > "$CFG.new"
+  if [ "$(wc -c < "$CFG.new" | tr -d ' ')" -ne 556 ]; then rm -f "$CFG.new"; printf '{"code":7,"msg":"write failed"}'; exit 0; fi
+  mv "$CFG.new" "$CFG" && sync
   printf '{"code":0}'
   ( sleep 2; sync; reboot || /sbin/reboot || busybox reboot ) </dev/null >/dev/null 2>&1 &
   ;;

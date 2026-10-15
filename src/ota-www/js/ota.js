@@ -18,7 +18,7 @@
     'st.uptime': 'Uptime', 'st.mem': 'Memory free', 'st.clients': 'Connected devices',
     'cp.res': 'Resolution', 'cp.auto': 'Auto', 'cp.res_hint': 'HD 1376×1072, SD 800×800, Auto follows the Tesla page. The Tesla page can override this per session.',
     'cp.icon': 'Car icon', 'cp.btnet': 'BT modem', 'on': 'On', 'off': 'Off',
-    'wifi.channel': 'Channel', 'wifi.channel_hint': 'Changing the channel restarts the hotspot; your phone reconnects by itself.',
+    'wifi.channel': 'Channel', 'wifi.channel_hint': 'Changing the channel reboots the adapter; your phone reconnects by itself. 36–48 and 149–165 are 5 GHz, 6 is 2.4 GHz.',
     'wifi.psk': 'Password', 'wifi.psk_hint': '8–11 characters (letters, digits, ! @ # $ ^ * ( ) _ - . , : ; ? ~). The adapter reboots; the iPhone and the Tesla must rejoin with the new password.',
     'wifi.noedit': 'No saved settings file yet — set a password once from the Tesla screen (Wi‑Fi page), then it can be changed here.',
     'save': 'Save', 'show': 'Show', 'hide': 'Hide', 'ok': 'OK', 'cancel': 'Cancel',
@@ -39,7 +39,7 @@
     'st.uptime': '가동 시간', 'st.mem': '여유 메모리', 'st.clients': '연결된 기기',
     'cp.res': '해상도', 'cp.auto': '자동', 'cp.res_hint': 'HD 1376×1072, SD 800×800, 자동은 테슬라 페이지를 따릅니다. 테슬라 페이지에서 세션마다 덮어쓸 수 있습니다.',
     'cp.icon': '차량 아이콘', 'cp.btnet': 'BT 모뎀', 'on': '켬', 'off': '끔',
-    'wifi.channel': '채널', 'wifi.channel_hint': '채널을 바꾸면 핫스팟이 재시작되고 폰이 자동으로 다시 접속합니다.',
+    'wifi.channel': '채널', 'wifi.channel_hint': '채널을 바꾸면 어댑터가 재부팅되고 폰이 자동으로 다시 접속합니다. 36–48, 149–165는 5 GHz, 6은 2.4 GHz입니다.',
     'wifi.psk': '비밀번호', 'wifi.psk_hint': '8–11자(영문, 숫자, ! @ # $ ^ * ( ) _ - . , : ; ? ~). 어댑터가 재부팅되며 iPhone과 테슬라가 새 비밀번호로 다시 접속해야 합니다.',
     'wifi.noedit': '저장된 설정 파일이 아직 없습니다 — 테슬라 화면(Wi‑Fi 페이지)에서 비밀번호를 한 번 설정하면 여기서도 바꿀 수 있습니다.',
     'save': '저장', 'show': '보기', 'hide': '숨기기', 'ok': '확인', 'cancel': '취소',
@@ -60,7 +60,7 @@
     'st.uptime': '稼働時間', 'st.mem': '空きメモリ', 'st.clients': '接続中のデバイス',
     'cp.res': '解像度', 'cp.auto': '自動', 'cp.res_hint': 'HD 1376×1072、SD 800×800、自動は Tesla ページに従います。Tesla ページ側でセッションごとに上書きできます。',
     'cp.icon': '車のアイコン', 'cp.btnet': 'BT モデム', 'on': 'オン', 'off': 'オフ',
-    'wifi.channel': 'チャンネル', 'wifi.channel_hint': 'チャンネルを変更するとホットスポットが再起動し、スマートフォンは自動で再接続します。',
+    'wifi.channel': 'チャンネル', 'wifi.channel_hint': 'チャンネルを変更するとアダプターが再起動し、スマートフォンは自動で再接続します。36〜48 と 149〜165 は 5 GHz、6 は 2.4 GHz です。',
     'wifi.psk': 'パスワード', 'wifi.psk_hint': '8〜11 文字（英数字と ! @ # $ ^ * ( ) _ - . , : ; ? ~）。アダプターが再起動し、iPhone と Tesla は新しいパスワードで接続し直す必要があります。',
     'wifi.noedit': '保存された設定ファイルがまだありません。Tesla 画面（Wi‑Fi ページ）で一度パスワードを設定すると、ここでも変更できます。',
     'save': '保存', 'show': '表示', 'hide': '隠す', 'ok': 'OK', 'cancel': 'キャンセル',
@@ -81,7 +81,7 @@
     'st.uptime': '运行时间', 'st.mem': '可用内存', 'st.clients': '已连接设备',
     'cp.res': '分辨率', 'cp.auto': '自动', 'cp.res_hint': 'HD 1376×1072，SD 800×800，自动跟随 Tesla 页面。Tesla 页面可按会话覆盖此设置。',
     'cp.icon': '车辆图标', 'cp.btnet': 'BT 调制解调器', 'on': '开', 'off': '关',
-    'wifi.channel': '信道', 'wifi.channel_hint': '更改信道会重启热点，手机会自动重新连接。',
+    'wifi.channel': '信道', 'wifi.channel_hint': '更改信道会重启适配器，手机会自动重新连接。36–48 和 149–165 为 5 GHz，6 为 2.4 GHz。',
     'wifi.psk': '密码', 'wifi.psk_hint': '8–11 个字符（字母、数字、! @ # $ ^ * ( ) _ - . , : ; ? ~）。适配器会重启，iPhone 和 Tesla 需用新密码重新连接。',
     'wifi.noedit': '尚无已保存的设置文件 — 先在 Tesla 屏幕（Wi‑Fi 页面）设置一次密码，之后即可在此修改。',
     'save': '保存', 'show': '显示', 'hide': '隐藏', 'ok': '确定', 'cancel': '取消',
@@ -102,7 +102,7 @@
     'st.uptime': '運作時間', 'st.mem': '可用記憶體', 'st.clients': '已連線裝置',
     'cp.res': '解析度', 'cp.auto': '自動', 'cp.res_hint': 'HD 1376×1072，SD 800×800，自動跟隨 Tesla 頁面。Tesla 頁面可依工作階段覆寫此設定。',
     'cp.icon': '車輛圖示', 'cp.btnet': 'BT 數據機', 'on': '開', 'off': '關',
-    'wifi.channel': '頻道', 'wifi.channel_hint': '更改頻道會重新啟動熱點，手機會自動重新連線。',
+    'wifi.channel': '頻道', 'wifi.channel_hint': '更改頻道會重新啟動轉接器，手機會自動重新連線。36–48 與 149–165 為 5 GHz，6 為 2.4 GHz。',
     'wifi.psk': '密碼', 'wifi.psk_hint': '8–11 個字元（字母、數字、! @ # $ ^ * ( ) _ - . , : ; ? ~）。轉接器會重新啟動，iPhone 與 Tesla 需以新密碼重新連線。',
     'wifi.noedit': '尚無已儲存的設定檔 — 先在 Tesla 螢幕（Wi‑Fi 頁面）設定一次密碼，之後即可在此修改。',
     'save': '儲存', 'show': '顯示', 'hide': '隱藏', 'ok': '確定', 'cancel': '取消',
@@ -187,9 +187,11 @@
       $('st-uuid').textContent = uuid || '—';
       $('st-ssid').textContent = j.name || '—';
       $('st-ch').textContent = j.sig != null ? j.sig : '—';
+      $('row-pix').hidden = j.pix == null;
       if (j.pix != null) segSet('seg-pix', j.pix);
       var sel = $('sel-ch'); if (j.sig != null && CHANNELS.indexOf(+j.sig) < 0) addChannel(+j.sig); sel.value = String(j.sig);
       $('row-icon').hidden = branch !== '1347';
+      $('hint-pix').hidden = j.pix == null;
       segSet('seg-icon', j.name === 'Tesla' ? 'tsl0Tesla' : '');
       if (j.btnet === 1 || j.btnet === 2) segSet('seg-btnet', j.btnet === 2 ? 1 : 0);
       $('foot').textContent = (j.name ? j.name + ' · ' : '') + appver;
@@ -201,7 +203,10 @@
       $('st-hw').textContent = j.hw || '—';
       var bt = j.hw === 'BT_Network' || branch === '1552';
       $('row-btnet').hidden = bt;
-    }).catch(function () { $('st-hw').textContent = '—'; });
+    }).catch(function () { $('st-hw').textContent = '—'; }).then(function () {
+      var card = $('card-carplay');
+      card.hidden = !card.querySelector('.row:not([hidden])');
+    });
   }
   function loadInfo() {
     return get('/cgi-bin/t2c.cgi?a=info').then(function (j) {
@@ -348,11 +353,18 @@
     segBind('seg-icon', function (v) { return setCgi('icon=' + v); });
     segBind('seg-btnet', function (v) { return setCgi('btnet=' + v); });
     $('sel-ch').onchange = function () {
-      var ch = this.value, prev = host ? String(host.sig) : '';
-      var sel = this;
+      var ch = this.value, prev = $('st-ch').textContent, sel = this;
       confirmBox(t('q.channel', { ch: ch })).then(function (ok) {
         if (!ok) { sel.value = prev; return; }
-        setCgi('wifi=' + ch).then(function (done) { if (done) $('st-ch').textContent = ch; else sel.value = prev; });
+        if (info && info.wifi_edit) {
+          // Same field the Tesla page writes (byte 5 of the settings file); the adapter reboots.
+          fetch('/cgi-bin/t2c.cgi?a=channel', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'ch=' + ch })
+            .then(function (r) { return r.json(); })
+            .then(function (j) { if (j.code !== 0) throw new Error(j.msg || ('code ' + j.code)); waitForReboot(t('msg.rebooting')); })
+            .catch(function (e) { toast(t('msg.fail') + ' (' + e.message + ')', 4000); sel.value = prev; });
+        } else {
+          setCgi('wifi=' + ch).then(function (done) { if (done) $('st-ch').textContent = ch; else sel.value = prev; });
+        }
       });
     };
     $('btn-reboot').onclick = function () {

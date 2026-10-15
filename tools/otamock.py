@@ -77,6 +77,11 @@ class H(SimpleHTTPRequestHandler):
             STATE['offline_until'] = time.time() + 12
             STATE['appver'] = '26099999.1508.1'
             return self._json({'code': 0, 'msg': 'upload successful', 'size': len(body)})
+        if u.path == '/cgi-bin/t2c.cgi' and q.get('a', [''])[0] == 'channel':
+            b = body.decode(errors='replace')
+            if not b.startswith('ch='): return self._json({'code': 4, 'msg': 'unsupported channel'})
+            STATE['sig'] = int(b[3:]); STATE['offline_until'] = time.time() + 6
+            return self._json({'code': 0})
         if u.path == '/cgi-bin/t2c.cgi' and q.get('a', [''])[0] == 'wifi':
             b = body.decode(errors='replace')
             if not self.server.wifi_edit: return self._json({'code': 6, 'msg': 'config file missing'})
