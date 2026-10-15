@@ -42,6 +42,7 @@
     this.handlers = {};
     this.ping = 0;
     this.pong = 0;
+    this.stale = false;    // pong overdue, probe running
     this.timer = 0;
     this.reconnectTimer = 0;
     this.h264 = null;
@@ -74,7 +75,7 @@
     ws.onopen = function () {
       clearTimeout(openTimeout);
       self.open = true;
-      self.ping = 0; self.pong = 0;
+      self.ping = 0; self.pong = 0; self.stale = false;
       self.sendHello();
       self.timer = setInterval(function () { self.tick(); }, 1000);
       self.emit('open');
@@ -119,13 +120,53 @@
 
   LinkClient.prototype.tick = function () {
     if (!this.open) return;
-    if (this.pong + 3 < this.ping) {
-      this.emit('pingtimeout');
-      try { this.ws.close(); } catch (e) { /* ignore */ }
-      return;
-    }
+    if (this.pong + 3 < this.ping && !this.stale) { this.stale = true; this.checkStale(); }
     this.raw(new Uint32Array([0x000C0004, this.ping]));
     this.ping++;
+  };
+
+  /* Pings go unanswered. lylinkui answers only the client that connected last (it keeps a
+   * single "current" connection), so if its HTTP side still responds and the pongs stay
+   * missing, another page has taken over. Reconnecting would take the adapter back,
+   * restart the CarPlay session and make the other page do the same a few seconds later,
+   * so stay disconnected and let the app ask the user. If HTTP is dead too, the link is
+   * gone: drop the socket and reconnect. */
+  LinkClient.prototype.checkStale = function () {
+    var self = this, ws = this.ws;
+    function current() { return ws === self.ws && self.open; }
+    function behind() { return self.pong + 3 < self.ping; }
+    var ctl = global.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 2500);
+    fetch('/js/boot.js', { cache: 'no-store', signal: ctl ? ctl.signal : undefined })
+      .then(function (r) { return r.ok; }, function () { return false; })
+      .then(function (alive) {
+        clearTimeout(timer);
+        if (!current()) return;
+        if (!alive) {
+          if (!behind()) { self.stale = false; return; }
+          self.emit('pingtimeout');
+          self.drop();
+          return;
+        }
+        // The adapter is up; a server that was only stalled answers the queued pings now.
+        setTimeout(function () {
+          if (!current()) return;
+          self.stale = false;
+          if (behind()) { self.close(); self.emit('superseded'); }
+        }, 2000);
+      });
+  };
+
+  /** Abandon the socket without waiting for its closing handshake, then reconnect. */
+  LinkClient.prototype.drop = function () {
+    var ws = this.ws;
+    if (ws) {
+      ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null;
+      try { ws.close(); } catch (e) { /* ignore */ }
+    }
+    this.cleanup();
+    this.emit('close');
+    this.scheduleReconnect();
   };
 
   LinkClient.prototype.raw = function (buf) {

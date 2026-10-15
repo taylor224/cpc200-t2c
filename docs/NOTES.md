@@ -235,3 +235,26 @@ while the phone has internet depends on its resolver also asking the adapter (th
 server in DHCP) when 8.8.8.8 says NXDOMAIN; offline it always works. Names ending in a
 number (`carplay.111`) are invalid URLs, and `.play`/`.app` are HSTS‑preloaded in
 Chromium (forced HTTPS, no way past the certificate error).
+
+## One page at a time (connect/disconnect loop, 2026-10-15)
+
+`callback_tsl` stores every new WebSocket as the single current client (`str r11, [r3, #0x4c]`
+at 0x17928, at connection time). The status JSON (and with it `pong`) and the ping handling
+only serve that client; older connections stay open but get no pongs. Each hello also
+restarts the CarPlay session while the size setting is Auto (`lylinkapi_start`, which kills
+and respawns `lylinkapp`).
+
+With two pages open (device log: a 1947×1185 `en-US` page and a 756×469 `ko-KR` page) the
+older one missed its pongs, closed after ~4 s, reconnected 1 s later, sent a hello and took
+the adapter back; then the other one did the same. Result: a CarPlay session restart every
+~5 s (27 in 13 min), the page flipping between "connected" and "waiting for iPhone", and no
+internet on the hotspot, because each `lylinkapp` exit also drops the iPhone's Bluetooth PAN
+(`btpan not connect bt device` ~10 s later, reconnect + `udhcpc` ~20–30 s later). In the
+4‑minute stretch without restarts the PAN stayed up.
+
+Since 26101504 the page probes `/js/boot.js` when pongs stop. If HTTP answers and the pongs
+are still missing 2 s later, another page owns the connection: the page stays disconnected
+and offers "Use this screen" instead of reconnecting. If HTTP is dead too, it drops the
+socket (no closing-handshake wait) and reconnects as before. `tools/devserver.py` now mimics
+the single current client and the Auto-mode restart on hello, so the loop reproduces locally
+with two headless Chromes (old UI: 8 restarts in 30 s; new: 1).

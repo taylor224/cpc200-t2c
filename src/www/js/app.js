@@ -48,6 +48,7 @@
     btconn: null, btdelay: null, btdel: null,
     pixel: 3, vid: false,
     carUi: false,          // iPhone asked for the car's own UI (Carlinkit app tapped in CarPlay)
+    elsewhere: false,      // another page connected to the adapter and took over
     updating: false, updateUrl: null,
     hasCell: true
   };
@@ -252,7 +253,10 @@
     var open = $('btn-open-carplay'), steps = $('home-steps');
     spin.classList.add('hidden'); dot.classList.remove('hidden', 'on', 'ok');
     open.hidden = true; steps.classList.remove('hidden');
-    if (state.link > 1) {
+    $('btn-use-here').hidden = !state.elsewhere;
+    if (state.elsewhere) {
+      txt.textContent = t('home.elsewhere'); steps.classList.add('hidden');
+    } else if (state.link > 1) {
       txt.textContent = t('home.connected'); dot.classList.add('ok'); open.hidden = false; steps.classList.add('hidden');
     } else if (state.link === 1 && state.carUi) {
       txt.textContent = t('home.car_ui'); dot.classList.add('ok'); open.hidden = false; steps.classList.add('hidden');
@@ -668,6 +672,18 @@
     switchVideo(j.link);
   }
 
+  /** Another page (other browser, tab or device) now owns the adapter's connection. */
+  function onSuperseded() {
+    console.warn('adapter taken over by another page');
+    if (state.updating) { updateFailed(); return; }
+    state.elsewhere = true;
+    switchVideo(-1);
+    stopVideo(); showPage('home');
+    renderHomeStatus();
+    dialog({ title: t('home.elsewhere'), text: t('home.elsewhere_hint'),
+      buttons: [{ label: t('dlg.cancel') }, { label: t('home.use_here'), primary: true, onClick: reload }] });
+  }
+
   /* ------------------------------------------------------- language UI */
 
   function renderLanguages() {
@@ -760,6 +776,7 @@
       a.addEventListener('click', function (e) { e.preventDefault(); showPage(a.getAttribute('data-page')); });
     });
     $('btn-reload').onclick = reload;
+    $('btn-use-here').onclick = reload;
     $('btn-stage-settings').onclick = function () {
       // Leave the picture, keep the CarPlay session; "Open CarPlay" brings it back.
       presenter.stop(); showStage(false); showPage('home');
@@ -891,6 +908,7 @@
         try { new QRCode(qr, { text: text, width: 256, height: 256, correctLevel: QRCode.CorrectLevel.M }); } catch (e) { qr.textContent = text; }
       })
       .on('pingtimeout', function () { if (state.updating) updateFailed(); else if (state.link > 0) switchVideo(-1); })
+      .on('superseded', onSuperseded)
       .on('close', function () { switchVideo(-1); })
       .on('open', function () { /* hello sent by client */ });
 

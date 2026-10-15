@@ -18,7 +18,7 @@ STATE = {
     'link': 0, 'phone': False, 'pong': 0,
     'cfg': {'auto': True, 'night': 0, 'pixel': 3, 'driver': 0, 'fps': 0, 'vid': False, 'lan': 3,
             'btnet': False, 'online': True, 'ch': 36, 'sh': 36, 'icon': '', 'name': ''},
-    'override': None, 'clients': set(), 'bt': 'TesPush_T2C-7F3A', 'btconn': None,
+    'override': None, 'clients': set(), 'current': None, 'bt': 'TesPush_T2C-7F3A', 'btconn': None,
     'paired': ['1AABBCCDDEE01Taylor iPhone', '1112233445566Guest iPhone'],
 }
 LOCK = threading.Lock()
@@ -149,9 +149,9 @@ def status_loop():
         n += 1
         j = {'sys': 12, 'exe': 3, 'apn': 'internet' if not ARGS.no_cell else '', 'sig': (n // 3) % 6,
              'csq': 18 if n % 10 else 0, 'bt': STATE['btconn'] or '', 'pong': 0}
-        with LOCK:
-            cl = list(STATE['clients'])
-        for c in cl:
+        # Like lylinkui: status (and with it the pong) only goes to the newest connection.
+        c = STATE['current']
+        if c is not None and c.alive:
             j['pong'] = c.pong
             c.send(msg(0, j))
 
@@ -311,11 +311,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         c.pong = 0
         with LOCK:
             STATE['clients'].add(c)
+            STATE['current'] = c
         log('ws client connected')
         try:
             while c.alive:
                 op, data = ws_read(self.rfile)
-                if op is None or op == 8:
+                if op == 8:
+                    c.send(ws_frame(8, data[:2]))   # answer the closing handshake
+                    break
+                if op is None:
                     break
                 if op == 9:
                     c.send(ws_frame(10, data))
@@ -328,6 +332,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         finally:
             with LOCK:
                 STATE['clients'].discard(c)
+                if STATE['current'] is c:
+                    STATE['current'] = None
+            self.close_connection = True
             log('ws client gone')
 
     def on_ws(self, c, data):
@@ -343,6 +350,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             c.hello = {'w': w, 'h': h, 'lang': rest[0].decode(errors='replace'), 'nav': rest[1].decode(errors='replace') if len(rest) > 1 else ''}
             log('hello', c.hello)
             c.send(msg(1, init_json()))
+            STATE['hellos'] = STATE.get('hellos', 0) + 1
+            if STATE['cfg']['pixel'] == 3 and STATE['link'] >= 1:
+                # lylinkui restarts the CarPlay session on every hello in Auto size mode.
+                def restart():
+                    log('session restart (hello in Auto mode)')
+                    set_link(0)
+                    time.sleep(1.5)
+                    set_link(1)
+                    time.sleep(0.5)
+                    set_link(2)
+                threading.Thread(target=restart, daemon=True).start()
+                return
             if ARGS.link_after >= 0 and STATE['link'] == 0:
                 def go():
                     STATE['phone'] = True
