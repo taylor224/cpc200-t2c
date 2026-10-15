@@ -44,6 +44,12 @@
       <div class="seg" id="seg-icon"><button data-v="">HOME</button><button data-v="tsl0Tesla">Tesla</button></div></div>
     <div class="row" id="row-btnet" hidden><span data-i18n="cp.btnet"></span>
       <div class="seg" id="seg-btnet"><button data-v="0" data-i18n="off"></button><button data-v="1" data-i18n="on"></button></div></div>
+    <div id="name-edit" hidden>
+      <label class="field"><span data-i18n="cp.name"></span>
+        <input id="in-name" maxlength="12" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <p class="hint"><span data-i18n="cp.name_hint"></span><br><span id="name-now"></span></p>
+      <div class="actions"><button class="btn btn-primary" id="btn-name-save" data-i18n="save"></button></div>
+    </div>
   </section>
 
   <section class="card">
@@ -78,7 +84,6 @@
   <section class="card">
     <h2 data-i18n="sec.software"></h2>
     <div class="row"><span data-i18n="sw.current"></span><b id="sw-cur">—</b></div>
-    <label class="field"><span data-i18n="sw.server"></span><input id="in-server" placeholder="https://…" inputmode="url" autocomplete="off" autocapitalize="off"></label>
     <div class="actions">
       <button class="btn" id="btn-check" data-i18n="sw.check"></button>
       <label class="btn" for="in-file" data-i18n="sw.upload"></label><input type="file" id="in-file" accept=".img,application/octet-stream" hidden>
@@ -87,7 +92,14 @@
       <div><b id="sw-new"></b><br><span id="sw-note" class="hint"></span></div>
       <div class="actions"><button class="btn btn-primary" id="btn-install" data-i18n="sw.install"></button></div>
     </div>
-    <div id="sw-prog" class="prog hidden"><div class="bar"><div id="sw-bar"></div></div><div id="sw-msg"></div></div>
+    <div id="sw-prog" class="prog hidden">
+      <ol class="stages" id="sw-stages">
+        <li data-s="download" data-i18n="stg.download"></li><li data-s="upload" data-i18n="stg.upload"></li><li data-s="verify" data-i18n="stg.verify"></li><li data-s="write" data-i18n="stg.write"></li><li data-s="done" data-i18n="stg.done"></li>
+      </ol>
+      <div class="bar"><div id="sw-bar"></div></div>
+      <div class="prog-line"><span id="sw-msg"></span><b id="sw-pct"></b></div>
+      <p class="hint" id="sw-eta"></p>
+    </div>
   </section>
   <footer class="foot" id="foot"></footer>
 </main>

@@ -357,10 +357,6 @@
           <div class="row-main"><div class="row-title" data-i18n="about.update"></div><div class="row-hint" id="about-sw"></div></div>
           <button class="btn btn-primary btn-sm" id="btn-update" data-i18n="about.check"></button>
         </div>
-        <div class="row">
-          <div class="row-main"><div class="row-title" data-i18n="about.update_url"></div><div class="row-hint" data-i18n="about.update_url_hint"></div></div>
-          <input type="url" id="update-url" class="field field-wide" placeholder="https://…">
-        </div>
       </div>
       <div class="group">
         <div class="row"><div class="row-main"><div class="row-title" data-i18n="about.model"></div></div><div class="row-value" id="about-model"></div></div>

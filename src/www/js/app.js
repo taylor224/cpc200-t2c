@@ -3,9 +3,8 @@
   'use strict';
 
   var CONFIG = {
-    // Firmware update server. The final location is not decided yet; override at
-    // runtime with ?test=<url> in the page URL or the "Update server" field on the
-    // About page (stored in localStorage key t2c.updateUrl).
+    // Firmware update server (<base>/<branch>/version.json). Fixed on purpose: the page
+    // offers no way to install firmware from anywhere else.
     UPDATE_BASE_URL: 'https://raw.githubusercontent.com/taylor224/cpc200-t2c/main/updates',
     // CarPlay session size limits (the adapter's own "HD" preset is 1376x1072).
     MAX_SESSION_AREA: 1376 * 1072,
@@ -36,8 +35,7 @@
     uiScale: store.get('uiScale', 'normal'),
     fit: store.get('fit', 'contain'),
     stats: store.get('stats', false),
-    transport: store.get('transport', 'auto'),
-    updateUrl: store.get('updateUrl', '')
+    transport: store.get('transport', 'auto')
   };
 
   var state = {
@@ -514,12 +512,7 @@
 
   /* ---------------------------------------------------- firmware update */
 
-  function updateBase() {
-    var m = /[?&]test=([^#&]+)/.exec(location.href);
-    if (m) return decodeURIComponent(m[1]).replace(/\/+$/, '');
-    if (prefs.updateUrl) return prefs.updateUrl.replace(/\/+$/, '');
-    return CONFIG.UPDATE_BASE_URL;
-  }
+  function updateBase() { return CONFIG.UPDATE_BASE_URL; }
 
   function checkUpdate() {
     if (!requireLink()) return;
@@ -843,8 +836,7 @@
     $('btn-channel').onclick = channelDialog;
 
     $('btn-update').onclick = checkUpdate;
-    $('update-url').value = prefs.updateUrl || '';
-    $('update-url').addEventListener('change', function () { prefs.updateUrl = this.value.trim(); store.set('updateUrl', prefs.updateUrl); });
+    try { localStorage.removeItem('t2c.updateUrl'); } catch (e) { /* older builds stored a server override */ }
     $('btn-reset').onclick = function () {
       if (!requireLink()) return;
       dialog({ title: t('about.reset'), text: t('about.reset_confirm'),

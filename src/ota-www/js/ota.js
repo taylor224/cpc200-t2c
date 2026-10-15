@@ -1,12 +1,13 @@
 /* Phone-facing page of the T2C. Data sources:
  *   /cgi-bin/index.cgi?id=host|set|upload   stock CGI (version, resolution, channel, upload)
  *   /hw.json                                 written by the adapter at boot (hardware id)
- *   /cgi-bin/t2c.cgi?a=info|reboot|log|cat   helper script shipped with this firmware
+ *   /cgi-bin/t2c.cgi?a=info|reboot|log|cat|wifi|channel|name|unname   helper script shipped with this firmware
  */
 (function () {
   'use strict';
   var CONFIG = {
-    // <base>/<branch>/version.json, e.g. .../updates/1508/version.json (editable on the page)
+    // <base>/<branch>/version.json, e.g. .../updates/1508/version.json (fixed: the page cannot
+    // be pointed at another server)
     UPDATE_BASE_URL: 'https://raw.githubusercontent.com/taylor224/cpc200-t2c/main/updates'
   };
   var CHANNELS = [6, 36, 40, 44, 48, 149, 153, 157, 161, 165];
@@ -14,6 +15,12 @@
 
   var T = {};
   T.en = {
+    'cp.name': 'Device name', 'cp.name_now': 'Now: Bluetooth {bt} · CarPlay {car}',
+    'cp.name_hint': 'Shown in the iPhone’s Bluetooth list and as the car in CarPlay. Up to 12 letters, digits, spaces and _ . -. The adapter reboots; the Wi‑Fi network name stays the same.',
+    'q.name': 'Rename the adapter to “{name}”? It reboots.', 'msg.name_chars': 'Use 1–12 letters, digits, spaces or _ . - (no space at the start or end)',
+    'stg.download': 'Download', 'stg.upload': 'Send', 'stg.verify': 'Check', 'stg.write': 'Write · reboot', 'stg.done': 'Done',
+    'sw.verifying': 'The adapter is checking and preparing the image', 'sw.writing': 'Writing the firmware — the adapter’s Wi‑Fi is off for about a minute; this page waits for it',
+    'sw.elapsed': 'Elapsed {t}', 'sw.left': 'about {t} left', 'sw.same': 'The adapter came back with the old version',
     'sec.status': 'Status', 'st.wifi': 'Wi‑Fi network', 'st.channel': 'Channel', 'st.fw': 'Firmware', 'st.hw': 'Hardware',
     'st.uptime': 'Uptime', 'st.mem': 'Memory free', 'st.clients': 'Connected devices',
     'cp.res': 'Resolution', 'cp.auto': 'Auto', 'cp.res_hint': 'HD 1376×1072, SD 800×800, Auto follows the Tesla page. The Tesla page can override this per session.',
@@ -23,7 +30,7 @@
     'wifi.noedit': 'No saved settings file yet — set a password once from the Tesla screen (Wi‑Fi page), then it can be changed here.',
     'save': 'Save', 'show': 'Show', 'hide': 'Hide', 'ok': 'OK', 'cancel': 'Cancel',
     'sec.system': 'System', 'sys.reboot': 'Reboot', 'sys.log': 'Download log', 'sys.reset': 'Factory reset', 'sys.diag': 'Diagnostics',
-    'sec.software': 'Software', 'sw.current': 'Installed', 'sw.server': 'Update server (leave empty for default)',
+    'sec.software': 'Software', 'sw.current': 'Installed',
     'sw.check': 'Check for updates', 'sw.upload': 'Install from file', 'sw.install': 'Download and install',
     'sw.latest': 'Your software is up to date', 'sw.new': 'New version available', 'sw.checking': 'Checking…', 'sw.check_fail': 'Could not reach the update server',
     'sw.downloading': 'Downloading…', 'sw.uploading': 'Uploading to the adapter…', 'sw.installing': 'Installing — the adapter reboots twice, keep it powered',
@@ -35,6 +42,12 @@
     'msg.psk_short': 'Password must be 8–11 characters', 'msg.psk_chars': 'Unsupported character in password'
   };
   T.ko = {
+    'cp.name': '기기 이름', 'cp.name_now': '현재: 블루투스 {bt} · CarPlay {car}',
+    'cp.name_hint': 'iPhone 블루투스 목록과 CarPlay 차량 이름으로 표시됩니다. 영문·숫자·공백·_ . - 최대 12자. 저장하면 어댑터가 재부팅되며, Wi‑Fi 네트워크 이름은 그대로입니다.',
+    'q.name': '어댑터 이름을 “{name}”(으)로 바꿀까요? 어댑터가 재부팅됩니다.', 'msg.name_chars': '영문·숫자·공백·_ . - 로 1–12자 (앞뒤 공백 불가)',
+    'stg.download': '다운로드', 'stg.upload': '전송', 'stg.verify': '검사', 'stg.write': '쓰기 · 재부팅', 'stg.done': '완료',
+    'sw.verifying': '어댑터가 이미지를 검사하고 준비하는 중', 'sw.writing': '펌웨어 쓰는 중 — 어댑터 Wi‑Fi가 1분쯤 꺼집니다. 이 페이지가 다시 연결될 때까지 기다립니다',
+    'sw.elapsed': '경과 {t}', 'sw.left': '약 {t} 남음', 'sw.same': '어댑터가 이전 버전으로 다시 켜졌습니다',
     'sec.status': '상태', 'st.wifi': 'Wi‑Fi 네트워크', 'st.channel': '채널', 'st.fw': '펌웨어', 'st.hw': '하드웨어',
     'st.uptime': '가동 시간', 'st.mem': '여유 메모리', 'st.clients': '연결된 기기',
     'cp.res': '해상도', 'cp.auto': '자동', 'cp.res_hint': 'HD 1376×1072, SD 800×800, 자동은 테슬라 페이지를 따릅니다. 테슬라 페이지에서 세션마다 덮어쓸 수 있습니다.',
@@ -44,7 +57,7 @@
     'wifi.noedit': '저장된 설정 파일이 아직 없습니다 — 테슬라 화면(Wi‑Fi 페이지)에서 비밀번호를 한 번 설정하면 여기서도 바꿀 수 있습니다.',
     'save': '저장', 'show': '보기', 'hide': '숨기기', 'ok': '확인', 'cancel': '취소',
     'sec.system': '시스템', 'sys.reboot': '재부팅', 'sys.log': '로그 다운로드', 'sys.reset': '공장 초기화', 'sys.diag': '진단 정보',
-    'sec.software': '소프트웨어', 'sw.current': '설치된 버전', 'sw.server': '업데이트 서버 (비우면 기본값)',
+    'sec.software': '소프트웨어', 'sw.current': '설치된 버전',
     'sw.check': '업데이트 확인', 'sw.upload': '파일로 설치', 'sw.install': '다운로드 후 설치',
     'sw.latest': '최신 버전입니다', 'sw.new': '새 버전이 있습니다', 'sw.checking': '확인 중…', 'sw.check_fail': '업데이트 서버에 연결할 수 없습니다',
     'sw.downloading': '다운로드 중…', 'sw.uploading': '어댑터로 전송 중…', 'sw.installing': '설치 중 — 어댑터가 두 번 재부팅합니다. 전원을 유지하세요',
@@ -56,6 +69,12 @@
     'msg.psk_short': '비밀번호는 8–11자여야 합니다', 'msg.psk_chars': '비밀번호에 쓸 수 없는 문자가 있습니다'
   };
   T.ja = {
+    'cp.name': 'デバイス名', 'cp.name_now': '現在: Bluetooth {bt} · CarPlay {car}',
+    'cp.name_hint': 'iPhone の Bluetooth 一覧と CarPlay の車名として表示されます。英数字・スペース・_ . - で 12 文字まで。保存するとアダプターが再起動します。Wi‑Fi ネットワーク名は変わりません。',
+    'q.name': 'アダプター名を「{name}」に変更しますか？ 再起動します。', 'msg.name_chars': '英数字・スペース・_ . - で 1〜12 文字（先頭と末尾のスペース不可）',
+    'stg.download': 'ダウンロード', 'stg.upload': '転送', 'stg.verify': '検査', 'stg.write': '書き込み · 再起動', 'stg.done': '完了',
+    'sw.verifying': 'アダプターがイメージを検査・準備しています', 'sw.writing': 'ファームウェアを書き込み中 — アダプターの Wi‑Fi が 1 分ほど切れます。このページは再接続を待ちます',
+    'sw.elapsed': '経過 {t}', 'sw.left': '残り約 {t}', 'sw.same': 'アダプターが以前のバージョンで起動しました',
     'sec.status': '状態', 'st.wifi': 'Wi‑Fi ネットワーク', 'st.channel': 'チャンネル', 'st.fw': 'ファームウェア', 'st.hw': 'ハードウェア',
     'st.uptime': '稼働時間', 'st.mem': '空きメモリ', 'st.clients': '接続中のデバイス',
     'cp.res': '解像度', 'cp.auto': '自動', 'cp.res_hint': 'HD 1376×1072、SD 800×800、自動は Tesla ページに従います。Tesla ページ側でセッションごとに上書きできます。',
@@ -65,7 +84,7 @@
     'wifi.noedit': '保存された設定ファイルがまだありません。Tesla 画面（Wi‑Fi ページ）で一度パスワードを設定すると、ここでも変更できます。',
     'save': '保存', 'show': '表示', 'hide': '隠す', 'ok': 'OK', 'cancel': 'キャンセル',
     'sec.system': 'システム', 'sys.reboot': '再起動', 'sys.log': 'ログをダウンロード', 'sys.reset': '初期化', 'sys.diag': '診断情報',
-    'sec.software': 'ソフトウェア', 'sw.current': 'インストール済み', 'sw.server': '更新サーバー（空欄で既定）',
+    'sec.software': 'ソフトウェア', 'sw.current': 'インストール済み',
     'sw.check': '更新を確認', 'sw.upload': 'ファイルからインストール', 'sw.install': 'ダウンロードしてインストール',
     'sw.latest': '最新の状態です', 'sw.new': '新しいバージョンがあります', 'sw.checking': '確認中…', 'sw.check_fail': '更新サーバーに接続できません',
     'sw.downloading': 'ダウンロード中…', 'sw.uploading': 'アダプターへ転送中…', 'sw.installing': 'インストール中 — アダプターは 2 回再起動します。電源を切らないでください',
@@ -77,6 +96,12 @@
     'msg.psk_short': 'パスワードは 8〜11 文字です', 'msg.psk_chars': 'パスワードに使用できない文字があります'
   };
   T['zh-CN'] = {
+    'cp.name': '设备名称', 'cp.name_now': '当前：蓝牙 {bt} · CarPlay {car}',
+    'cp.name_hint': '显示在 iPhone 的蓝牙列表和 CarPlay 车辆名称中。最多 12 个字母、数字、空格及 _ . -。保存后适配器会重启，Wi‑Fi 网络名称不变。',
+    'q.name': '将适配器名称改为“{name}”？适配器会重启。', 'msg.name_chars': '1–12 个字母、数字、空格或 _ . -（首尾不能是空格）',
+    'stg.download': '下载', 'stg.upload': '传输', 'stg.verify': '校验', 'stg.write': '写入 · 重启', 'stg.done': '完成',
+    'sw.verifying': '适配器正在校验并准备镜像', 'sw.writing': '正在写入固件 — 适配器的 Wi‑Fi 会关闭约一分钟，本页面会等待其恢复',
+    'sw.elapsed': '已用 {t}', 'sw.left': '约剩 {t}', 'sw.same': '适配器以旧版本重新启动',
     'sec.status': '状态', 'st.wifi': 'Wi‑Fi 网络', 'st.channel': '信道', 'st.fw': '固件', 'st.hw': '硬件',
     'st.uptime': '运行时间', 'st.mem': '可用内存', 'st.clients': '已连接设备',
     'cp.res': '分辨率', 'cp.auto': '自动', 'cp.res_hint': 'HD 1376×1072，SD 800×800，自动跟随 Tesla 页面。Tesla 页面可按会话覆盖此设置。',
@@ -86,7 +111,7 @@
     'wifi.noedit': '尚无已保存的设置文件 — 先在 Tesla 屏幕（Wi‑Fi 页面）设置一次密码，之后即可在此修改。',
     'save': '保存', 'show': '显示', 'hide': '隐藏', 'ok': '确定', 'cancel': '取消',
     'sec.system': '系统', 'sys.reboot': '重启', 'sys.log': '下载日志', 'sys.reset': '恢复出厂设置', 'sys.diag': '诊断信息',
-    'sec.software': '软件', 'sw.current': '已安装', 'sw.server': '更新服务器（留空使用默认）',
+    'sec.software': '软件', 'sw.current': '已安装',
     'sw.check': '检查更新', 'sw.upload': '从文件安装', 'sw.install': '下载并安装',
     'sw.latest': '已是最新版本', 'sw.new': '有新版本', 'sw.checking': '检查中…', 'sw.check_fail': '无法连接更新服务器',
     'sw.downloading': '下载中…', 'sw.uploading': '正在传输到适配器…', 'sw.installing': '安装中 — 适配器会重启两次，请保持供电',
@@ -98,6 +123,12 @@
     'msg.psk_short': '密码须为 8–11 个字符', 'msg.psk_chars': '密码包含不支持的字符'
   };
   T['zh-TW'] = {
+    'cp.name': '裝置名稱', 'cp.name_now': '目前：藍牙 {bt} · CarPlay {car}',
+    'cp.name_hint': '顯示在 iPhone 的藍牙清單與 CarPlay 車輛名稱中。最多 12 個字母、數字、空格及 _ . -。儲存後轉接器會重新啟動，Wi‑Fi 網路名稱不變。',
+    'q.name': '將轉接器名稱改為「{name}」？轉接器會重新啟動。', 'msg.name_chars': '1–12 個字母、數字、空格或 _ . -（開頭與結尾不能是空格）',
+    'stg.download': '下載', 'stg.upload': '傳輸', 'stg.verify': '檢查', 'stg.write': '寫入 · 重新啟動', 'stg.done': '完成',
+    'sw.verifying': '轉接器正在檢查並準備映像檔', 'sw.writing': '正在寫入韌體 — 轉接器的 Wi‑Fi 會關閉約一分鐘，本頁面會等待其恢復',
+    'sw.elapsed': '已過 {t}', 'sw.left': '約剩 {t}', 'sw.same': '轉接器以舊版本重新啟動',
     'sec.status': '狀態', 'st.wifi': 'Wi‑Fi 網路', 'st.channel': '頻道', 'st.fw': '韌體', 'st.hw': '硬體',
     'st.uptime': '運作時間', 'st.mem': '可用記憶體', 'st.clients': '已連線裝置',
     'cp.res': '解析度', 'cp.auto': '自動', 'cp.res_hint': 'HD 1376×1072，SD 800×800，自動跟隨 Tesla 頁面。Tesla 頁面可依工作階段覆寫此設定。',
@@ -107,7 +138,7 @@
     'wifi.noedit': '尚無已儲存的設定檔 — 先在 Tesla 螢幕（Wi‑Fi 頁面）設定一次密碼，之後即可在此修改。',
     'save': '儲存', 'show': '顯示', 'hide': '隱藏', 'ok': '確定', 'cancel': '取消',
     'sec.system': '系統', 'sys.reboot': '重新啟動', 'sys.log': '下載記錄', 'sys.reset': '恢復原廠設定', 'sys.diag': '診斷資訊',
-    'sec.software': '軟體', 'sw.current': '已安裝', 'sw.server': '更新伺服器（留空使用預設）',
+    'sec.software': '軟體', 'sw.current': '已安裝',
     'sw.check': '檢查更新', 'sw.upload': '從檔案安裝', 'sw.install': '下載並安裝',
     'sw.latest': '已是最新版本', 'sw.new': '有新版本', 'sw.checking': '檢查中…', 'sw.check_fail': '無法連線更新伺服器',
     'sw.downloading': '下載中…', 'sw.uploading': '正在傳輸到轉接器…', 'sw.installing': '安裝中 — 轉接器會重新啟動兩次，請保持供電',
@@ -203,10 +234,7 @@
       $('st-hw').textContent = j.hw || '—';
       var bt = j.hw === 'BT_Network' || branch === '1552';
       $('row-btnet').hidden = bt;
-    }).catch(function () { $('st-hw').textContent = '—'; }).then(function () {
-      var card = $('card-carplay');
-      card.hidden = !card.querySelector('.row:not([hidden])');
-    });
+    }).catch(function () { $('st-hw').textContent = '—'; }).then(showCarplayCard);
   }
   function loadInfo() {
     return get('/cgi-bin/t2c.cgi?a=info').then(function (j) {
@@ -220,7 +248,18 @@
       $('wifi-view').hidden = !!j.wifi_edit;
       $('in-psk').value = j.psk || '';
       $('wifi-psk-text').textContent = '••••••••';
+      // cgi 3 and later can rename the adapter (Bluetooth name + CarPlay car name)
+      $('name-edit').hidden = !(j.cgi >= 3);
+      if (j.cgi >= 3) {
+        if (document.activeElement !== $('in-name')) $('in-name').value = j.devname || j.btname || '';
+        $('name-now').textContent = t('cp.name_now', { bt: j.btname || '—', car: j.carname || '—' });
+      }
+      showCarplayCard();
     }).catch(function () { info = null; $('wifi-view').hidden = false; });
+  }
+  function showCarplayCard() {
+    var card = $('card-carplay');
+    card.hidden = !card.querySelector('.row:not([hidden]), #name-edit:not([hidden])');
   }
   function addChannel(ch) { var o = document.createElement('option'); o.value = o.textContent = ch; $('sel-ch').appendChild(o); }
 
@@ -239,11 +278,7 @@
   }
 
   /* ------------------------------------------------------------ software */
-  function updateBase() {
-    var v = localStorage.getItem('t2c.updateUrl') || '';
-    if (v) return v.replace(/\/+$/, '');
-    return CONFIG.UPDATE_BASE_URL;
-  }
+  function updateBase() { return CONFIG.UPDATE_BASE_URL; }
   var candidate = null;
   function pickVersion(j) {
     var mine = (sn + uuid).toLowerCase();
@@ -273,12 +308,52 @@
       })
       .catch(function () { $('btn-check').disabled = false; toast(t('sw.check_fail'), 4000); });
   }
-  function progress(pct, msg) {
-    $('sw-prog').classList.remove('hidden'); $('sw-bar').style.width = Math.max(0, Math.min(100, pct)) + '%';
+
+  /* Install progress. Download and upload are measured; what the adapter does afterwards is
+   * known only coarsely: index.cgi?id=host reports update 1-2 while it checks and prepares
+   * the image (about 4.5 minutes on the bench), then it reboots into recovery to write the
+   * flash (no answer for ~30-60 s) and comes back with the new version (update 3 = done,
+   * above 3 = failure code, as the stock page reads it). */
+  var STAGES = ['download', 'upload', 'verify', 'write', 'done'];
+  var SPAN = { download: [0, 40], upload: [40, 55], verify: [55, 88], write: [88, 99], done: [100, 100] };
+  var EXPECT = { verify: 270, write: 45 };   // seconds
+  var job = null;
+  function fmtTime(sec) { sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ':' + ('0' + sec % 60).slice(-2); }
+  function stageElapsed() { return (Date.now() - job.tStage) / 1000; }
+  function setStage(name, frac, msg) {
+    if (!job) return;
+    if (job.stage !== name) { job.stage = name; job.tStage = Date.now(); }
+    var idx = STAGES.indexOf(name), lis = $('sw-stages').querySelectorAll('li');
+    for (var i = 0; i < lis.length; i++) {
+      var st = lis[i].getAttribute('data-s'), k = STAGES.indexOf(st);
+      lis[i].className = job.skip[st] ? 'skip' : (k < idx || name === 'done') ? 'done' : k === idx ? 'now' : '';
+    }
+    var r = SPAN[name], pct = r[0] + (r[1] - r[0]) * Math.max(0, Math.min(1, frac || 0));
+    $('sw-prog').classList.remove('hidden');
+    $('sw-bar').style.width = pct + '%';
+    $('sw-pct').textContent = Math.floor(pct) + '%';
     if (msg != null) $('sw-msg').textContent = msg;
+    showEta();
+  }
+  function showEta() {
+    if (!job) return;
+    var txt = t('sw.elapsed', { t: fmtTime((Date.now() - job.t0) / 1000) });
+    if (!job.end && (job.stage === 'verify' || job.stage === 'write')) {
+      var left = job.stage === 'verify' ? Math.max(30, EXPECT.verify - stageElapsed()) + EXPECT.write : Math.max(10, EXPECT.write - stageElapsed());
+      txt += ' · ' + t('sw.left', { t: fmtTime(left) });
+    }
+    $('sw-eta').textContent = txt;
+  }
+  function endJob(ok, msg) {
+    job.end = true; clearInterval(job.timer);
+    if (!ok) {
+      var cur = $('sw-stages').querySelector('li.now'); if (cur) cur.className = 'fail';
+      $('sw-msg').textContent = msg; $('btn-install').disabled = false; $('btn-check').disabled = false;
+    }
+    showEta();
   }
   function download(url) {
-    progress(0, t('sw.downloading'));
+    setStage('download', 0, t('sw.downloading'));
     return fetch(url).then(function (r) {
       if (!r.ok) throw new Error('http ' + r.status);
       var total = +r.headers.get('Content-Length') || 0, got = 0, chunks = [], reader = r.body.getReader();
@@ -286,7 +361,7 @@
         return reader.read().then(function (res) {
           if (res.done) { var out = new Uint8Array(got), p = 0; chunks.forEach(function (c) { out.set(c, p); p += c.length; }); return out; }
           chunks.push(res.value); got += res.value.length;
-          if (total) progress(got / total * 50);
+          if (total) setStage('download', got / total);
           return read();
         });
       })();
@@ -294,10 +369,10 @@
   }
   function upload(bytes) {
     return new Promise(function (resolve, reject) {
-      progress(50, t('sw.uploading'));
+      setStage('upload', 0, t('sw.uploading'));
       var xhr = new XMLHttpRequest(), fd = new FormData();
       fd.append('file', new Blob([bytes]), 'update.img');
-      xhr.upload.onprogress = function (e) { if (e.lengthComputable) progress(50 + e.loaded / e.total * 20); };
+      xhr.upload.onprogress = function (e) { if (e.lengthComputable) setStage('upload', e.loaded / e.total); };
       xhr.onreadystatechange = function () {
         if (xhr.readyState !== 4) return;
         var j = null; try { j = JSON.parse(xhr.responseText); } catch (e) { /* ignore */ }
@@ -307,27 +382,32 @@
     });
   }
   function monitorInstall() {
-    var before = appver, t0 = Date.now(), down = false;
-    progress(72, t('sw.installing'));
+    var before = appver, down = false;
+    setStage('verify', 0, t('sw.verifying'));
     (function poll() {
       fetch('/cgi-bin/index.cgi?id=host', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
         var v = (j.sys && j.sys.appver) || '';
-        if (j.update > 3) { progress(100, t('sw.fail') + ' (' + j.update + ')'); return; }
-        if (down && v && v !== before) { progress(100, t('sw.done') + ' · ' + v); setTimeout(function () { location.reload(); }, 3000); return; }
-        if (down && v === before && Date.now() - t0 > 60000) { progress(100, t('sw.fail')); return; }
-        progress(72 + Math.min(25, (Date.now() - t0) / 20000)); setTimeout(poll, 4000);
+        if (j.update > 3) { endJob(false, t('sw.fail') + ' (' + j.update + ')'); return; }
+        if (v && v !== before && (down || j.update === 3)) {
+          setStage('done', 1, t('sw.done') + ' · ' + v); endJob(true);
+          setTimeout(function () { location.reload(); }, 4000); return;
+        }
+        if (down && v === before && stageElapsed() > 90) { endJob(false, t('sw.same')); return; }
+        if (!down) setStage('verify', Math.min(0.95, stageElapsed() / EXPECT.verify), t('sw.verifying'));
+        setTimeout(poll, 3000);
       }).catch(function () {
-        down = true; progress(85 + Math.min(12, (Date.now() - t0) / 40000));
-        if (Date.now() - t0 > 12 * 60000) { progress(100, t('sw.fail')); return; }
-        setTimeout(poll, 4000);
+        if (!down) { down = true; setStage('write', 0, t('sw.writing')); }
+        else setStage('write', Math.min(0.95, stageElapsed() / EXPECT.write));
+        if (Date.now() - job.t0 > 15 * 60000) { endJob(false, t('msg.offline')); return; }
+        setTimeout(poll, 3000);
       });
     })();
   }
-  function install(bytesPromise) {
-    $('btn-install').disabled = true; $('btn-check').disabled = true;
-    bytesPromise.then(upload).then(monitorInstall).catch(function (e) {
-      progress(100, t('sw.fail') + ': ' + e.message); $('btn-install').disabled = false; $('btn-check').disabled = false;
-    });
+  function install(getBytes, fromFile) {
+    $('btn-install').disabled = true; $('btn-check').disabled = true; $('sw-result').classList.add('hidden');
+    job = { t0: Date.now(), tStage: Date.now(), stage: '', skip: { download: !!fromFile }, end: false };
+    job.timer = setInterval(showEta, 1000);
+    getBytes().then(upload).then(monitorInstall).catch(function (e) { endJob(false, t('sw.fail') + ': ' + e.message); });
   }
 
   /* ------------------------------------------------------------ wiring */
@@ -337,8 +417,7 @@
     $('lang').onchange = function () { localStorage.setItem('t2c.lang', this.value); lang = pickLang(this.value); applyLang(); };
     applyLang();
     CHANNELS.forEach(addChannel);
-    $('in-server').value = localStorage.getItem('t2c.updateUrl') || '';
-    $('in-server').onchange = function () { localStorage.setItem('t2c.updateUrl', this.value.trim()); };
+    try { localStorage.removeItem('t2c.updateUrl'); } catch (e) { /* older builds let users override the server */ }
     DIAG.forEach(function (name) {
       var b = document.createElement('button'); b.textContent = name;
       b.onclick = function () {
@@ -377,7 +456,10 @@
     $('btn-reset').onclick = function () {
       confirmBox(t('q.reset')).then(function (ok) {
         if (!ok) return;
-        get('/cgi-bin/index.cgi?id=set&rst=1').then(function (j) {
+        // the device name lives outside the stock settings; forget it first (older CGI: ignored)
+        fetch('/cgi-bin/t2c.cgi?a=unname', { cache: 'no-store' }).catch(function () {}).then(function () {
+          return get('/cgi-bin/index.cgi?id=set&rst=1');
+        }).then(function (j) {
           if (j.code !== 0) throw new Error('code ' + j.code);
           waitForReboot(t('msg.reset'));
         }).catch(function (e) { toast(t('msg.fail') + ' (' + e.message + ')'); });
@@ -400,16 +482,28 @@
         .then(function (j) { if (j.code !== 0) throw new Error(j.msg || ('code ' + j.code)); waitForReboot(t('msg.rebooting')); })
         .catch(function (e) { toast(t('msg.fail') + ' (' + e.message + ')', 4000); });
     };
+    $('btn-name-save').onclick = function () {
+      var name = $('in-name').value;
+      if (!/^[A-Za-z0-9_.-]([A-Za-z0-9 _.-]{0,10}[A-Za-z0-9_.-])?$/.test(name)) { toast(t('msg.name_chars'), 4000); return; }
+      confirmBox(t('q.name', { name: name })).then(function (ok) {
+        if (!ok) return;
+        fetch('/cgi-bin/t2c.cgi?a=name', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'name=' + name })
+          .then(function (r) { return r.json(); })
+          .then(function (j) { if (j.code !== 0) throw new Error(j.msg || ('code ' + j.code)); waitForReboot(t('msg.rebooting')); })
+          .catch(function (e) { toast(t('msg.fail') + ' (' + e.message + ')', 4000); });
+      });
+    };
     $('btn-check').onclick = checkUpdate;
     $('btn-install').onclick = function () {
       if (!candidate) return;
-      confirmBox(t('q.install', { v: candidate.appver })).then(function (ok) { if (ok) install(download(candidate.url + '?t=' + Math.random())); });
+      var url = candidate.url + '?t=' + Math.random();
+      confirmBox(t('q.install', { v: candidate.appver })).then(function (ok) { if (ok) install(function () { return download(url); }, false); });
     };
     $('in-file').onchange = function () {
       var f = this.files && this.files[0]; this.value = ''; if (!f) return;
       confirmBox(t('q.install', { v: f.name })).then(function (ok) {
         if (!ok) return;
-        install(f.arrayBuffer().then(function (b) { progress(50); return new Uint8Array(b); }));
+        install(function () { return f.arrayBuffer().then(function (b) { return new Uint8Array(b); }); }, true);
       });
     };
 

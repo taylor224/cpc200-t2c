@@ -213,28 +213,72 @@ encoded stream itself, so scrolling cannot look like a native 60 Hz screen. What
 controls is touch timing: moves were coalesced to one per animation frame until 26101501;
 since 26101502 they are forwarded as they arrive (iOS derives scroll velocity from them).
 
-## Built-in DNS (`dnsd` in lylinkui) and `carplay.lan`
+## Built-in DNS (`dnsd` in lylinkui): `carplay.internal`, `setting.internal`
 
 `lylinkui` runs a tiny DNS responder on UDP 53 (`process_request` 0x20a90). Stock rules:
 names from a static table at 0x3d0a8 (`tespush.cn`, `tespush.com`, `www.tespush.cn`,
-`www.tespush.com`; branch 1508 uses 6 entries, two of them duplicates) are answered with
-the Tesla‑UI address (TTL 121); any name with a label containing `tesla` is answered with
-the same address (TTL 0, presumably the car's connectivity check while offline); the rest
-gets REFUSED. `dnsd_disable(1)` is called once `data.carlinkit.com` resolves (phone
-internet up); from then on every query is dropped.
+`www.tespush.com`; `dnsd_init` uses 6 entries for branches 1508/1532/1552, two of them
+duplicates, and only `tslbox.cn` otherwise) are answered with the Tesla‑UI address (TTL
+121, read through GOT+0x260); any name with a label containing `tesla` is answered with the
+same address (TTL 0, presumably the car's connectivity check while offline); the rest gets
+REFUSED. `dnsd_disable(1)` is called once `data.carlinkit.com` resolves (phone internet
+up); from then on every query is dropped.
 
 `tools/patch_lylinkui.py` (applied by `tools/build.sh`, checked by `tools/verify.sh`)
-replaces one duplicate entry with `carplay.lan`, keeps answering table names while
-disabled, and leaves everything else exactly as before (online: drop, including the
-`tesla` catch‑all). It reuses the per‑query debug log call as a code cave and its format
-string for the new name, and refuses to run on any lylinkui other than SHA‑256
-`37ce2c3a…` (26090414). lylinkui also serves the UI and the WebSocket over plain HTTP on
-`101.200.208.6:80` for any host name except `tespush.com` (which gets a 301 to HTTPS), so
-`http://carplay.lan/` opens the CarPlay page. Whether the car resolves `carplay.lan`
-while the phone has internet depends on its resolver also asking the adapter (third DNS
-server in DHCP) when 8.8.8.8 says NXDOMAIN; offline it always works. Names ending in a
-number (`carplay.111`) are invalid URLs, and `.play`/`.app` are HSTS‑preloaded in
-Chromium (forced HTTPS, no way past the certificate error).
+puts `carplay.internal` and `setting.internal` into the two duplicate slots (2 and 5), keeps
+answering table names while disabled, and leaves everything else exactly as before
+(online: drop, including the `tesla` catch‑all). The wire‑format names live in the zero
+padding after the r‑x segment (file 0x1c690, the segment's `p_filesz`/`p_memsz` grow from
+0x1c68c to 0x1c6b4, still far below the data segment at 0x1cb40). The per‑query debug log
+call is the code cave: one branch handles "no match while disabled → drop", a second one
+replaces the answer's address with 192.168.3.1 when the question starts with `\x07s`
+(only `setting.internal` in the table does; `r8` still points at the question there). The
+script refuses any lylinkui other than SHA‑256 `37ce2c3a…` (26090414).
+
+`setting.internal` → busybox httpd on 192.168.3.1:80 (ignores the Host header), the
+settings page. `carplay.internal` → `101.200.208.6:80`, where lylinkui serves the UI and the
+WebSocket over plain HTTP for any host name except `tespush.com` (301 to HTTPS). `.internal`
+is reserved for private use (ICANN 2024) and is not HSTS‑preloaded; `.play`/`.app` are, and
+names ending in a number are not URLs. Chromium treats an unknown suffix typed without a
+scheme as a search, so type `http://` or a trailing slash the first time.
+
+Open point: while the phone has internet, a client only gets these names if its resolver
+asks the adapter (third DNS server in DHCP, after 8.8.8.8 and 114.114.114.114). A resolver
+that sends to all servers at once (musl, connman's proxy) takes the adapter's answer, which
+arrives first; one that asks 8.8.8.8 first and accepts its NXDOMAIN (glibc) does not. Offline
+it always works. Moving 192.168.3.1 to the front of `app/udhcpd.conf` would fix that but
+also routes every lookup of the car through the adapter first; that needs the online "drop"
+turned into REFUSED, and leaves the `tesla` catch‑all in charge whenever the adapter's own
+online check fails — not done without a test in the car.
+
+## Device name (Bluetooth name, CarPlay car name)
+
+- Bluetooth: `gocsdk -T/dev/ttyS3 -N$BT_NAME` in `app/blink.sh`; `BT_NAME` (like `WIFI_NAME`,
+  the hotspot SSID that lylinkui copies to `this+0x3a8` and writes as `ssid=`) comes from the
+  rootfs init, `AutoKit_051E` on the bench (`custom_name` + MAC suffix). `blink.sh` waits for
+  `/mnt/UDISK` before starting gocsdk; the build inserts a hook there that replaces
+  `BT_NAME` with `/mnt/UDISK/t2c_name` (filtered to `A-Za-z0-9 _.-`, 12 bytes) and quotes the
+  argument. lylinkapp's own env reads are only `LOCAL_IP_ADDRESS` and `PRODUCT_NAME` (passed
+  to the iAP2 init at 0x247e0); neither is touched.
+- CarPlay car name: 12 bytes at offset 20 of `lycfg.txt` (`this+0x46c`), icon id at offset 32
+  (`this+0x478`); the type‑10 WebSocket message (`callback_tsl` 0x1890c) copies both without a
+  terminator and turns `"` into `'`. Default `Auto`.
+- `t2c.cgi?a=name` writes both and reboots; `a=unname` deletes `t2c_name` (the phone page
+  calls it before a factory reset). The SSID stays as it is, so the car's saved Wi‑Fi keeps
+  working. Not yet verified on the device: whether gocsdk applies `-N` on every start and
+  whether iOS refreshes a paired device's name without re‑pairing.
+
+## Firmware update progress
+
+Stock `index.cgi?id=host` reports `update`: 1–2 while the adapter checks/prepares an uploaded
+image, 3 when done, above 3 a failure code (the stock page's `timer_8min` reads it this
+way); during the recovery reboot the CGI does not answer. Bench timings: ~4.5 min
+checking, ~30–60 s offline, back with the new `appver`. The settings page shows these as
+stages (download and send measured, check and write/reboot from the timings, done from the
+new version). The installer on github.io cannot read the adapter at all (HTTPS → HTTP is
+mixed content, and `targetAddressSpace` is not available on iOS), so it shows the same
+stages on a timer after the form is submitted, keeps them across a reload
+(`sessionStorage`), and offers a stop button for a rejected upload.
 
 ## One page at a time (connect/disconnect loop, 2026-10-15)
 

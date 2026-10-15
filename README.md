@@ -23,11 +23,15 @@ The easiest way is the installer page: **https://taylor224.github.io/cpc200-t2c/
 4. Wait about five minutes. The adapter checks the file, reboots into recovery, writes
    the firmware and reboots again (its Wi‑Fi disappears for ~30 s in the middle).
 
-Afterwards `http://192.168.3.1` is the new settings page and the car browser shows the new
-CarPlay page at `tespush.com` or `carplay.lan/` (the adapter's built‑in DNS answers that
-name; type the trailing slash the first time so the browser does not run a search). Later updates are one tap: in the car *Settings → About → Check for updates*,
-or on the phone page *Software → Check for updates*; both read `updates/1508/version.json`
-from this repository and install the image linked there.
+Afterwards `http://192.168.3.1` (or `http://setting.internal/`) is the new settings page and
+the car browser shows the new CarPlay page at `tespush.com` or `http://carplay.internal/`
+(the adapter's built‑in DNS answers both names; type `http://` or the trailing slash the
+first time so the browser does not run a search). Later updates are one tap: in the car
+*Settings → About → Check for updates*, or on the settings page *Software → Check for
+updates*; both read `updates/1508/version.json` from this repository and install the image
+linked there. While the page on GitHub cannot see the adapter (see below), it shows the
+install stages on a timer; the adapter's own settings page shows them from the adapter's
+state.
 
 Why the two steps: the installer is served over HTTPS and browsers refuse to send
 requests from an HTTPS page to the adapter's plain‑HTTP address (mixed content), so the
@@ -89,16 +93,17 @@ and a page reload loop on resize. Carlinkit has not shipped a fix.
   Carbon Dark theme that can follow the CarPlay night‑mode schedule.
 - A pairing screen with the Bluetooth name, steps, status, and a QR card.
 - Settings: Devices, Cellular, Wi‑Fi (password/channel), Bluetooth modem, Display,
-  Language, System (car name/icon), About (update, factory reset, update server).
+  Language, System (car name/icon), About (update, factory reset).
 
 **Languages**: English, 简体中文, 繁體中文, 한국어, 日本語 (client‑side; the adapter can
 only persist zh‑CN/zh‑TW/en, so the choice is kept in the browser's storage).
 
 **Firmware update server**: both pages read `<base>/<branch>/version.json` (branch `1508`),
 default base `https://raw.githubusercontent.com/taylor224/cpc200-t2c/main/updates`
-(`CONFIG.UPDATE_BASE_URL` in `src/www/js/app.js` and `src/ota-www/js/ota.js`). It can be
-overridden with `?test=<url>` in the Tesla page URL or the *Update server* field on either
-page. `updates/1508/version.json` carries `appver` (compared by the phone page), `tsl`
+(`CONFIG.UPDATE_BASE_URL` in `src/www/js/app.js` and `src/ota-www/js/ota.js`). It is fixed:
+neither page accepts another server (no URL parameter, no settings field), so nobody with
+access to the car's screen or the hotspot can point the updater at a foreign image.
+`updates/1508/version.json` carries `appver` (compared by the phone page), `tsl`
 (compared by the Tesla page), `url` and `msg`. `url` points at the copy of the image on the
 orphan `releases` branch (served by raw.githubusercontent.com with CORS headers; GitHub
 release assets are not, so a browser cannot fetch them); the same file is attached to the
@@ -110,15 +115,17 @@ cycle: build, rewrite `version.json`, commit, push, GitHub release with the imag
 **Phone page (`http://192.168.3.1/`, `src/ota-www`)**
 - Same design language as the Tesla page, five languages, dark mode follows the phone.
 - Status (network, channel, firmware, hardware, UUID, uptime, memory, connected devices),
-  resolution and channel (stock `index.cgi?id=set`), **reboot**, **Wi‑Fi password change**
-  (writes the adapter's own settings file and reboots; the network name is derived by the
-  firmware and cannot be changed), factory reset with confirmation, plain‑text log download,
-  diagnostics (hostapd config, settings file, MTD table, mounts, processes, U‑Boot env …),
-  update check against an editable server URL, install from the server or from a local file
-  with reboot monitoring. The feedback upload to Carlinkit's cloud and the 536 KB Aliyun SDK
+  resolution and channel (stock `index.cgi?id=set`), **device name** (Bluetooth name and
+  CarPlay car name, 1–12 of `A‑Z a‑z 0‑9 space _ . -`; reboots), **reboot**, **Wi‑Fi
+  password change** (writes the adapter's own settings file and reboots; the network name is
+  derived by the firmware and stays as it is), factory reset with confirmation, plain‑text
+  log download, diagnostics (hostapd config, settings file, MTD table, mounts, processes,
+  U‑Boot env, DNS …), update check, install from the server or from a local file with
+  staged progress (download, send, check, write/reboot, done; elapsed and remaining time). The feedback upload to Carlinkit's cloud and the 536 KB Aliyun SDK
   are gone.
 - `cgi-bin/t2c.cgi` only knows fixed actions (`info`, `reboot`, `log`, `cat&f=<name>` from a
-  whitelist, `wifi`); nothing from the request reaches a shell command.
+  whitelist, `wifi`, `channel`, `name`, `unname`); nothing from the request reaches a shell
+  command, and the name is checked against a fixed character set before it is stored.
 - The adapter stores the Wi‑Fi password in a 12‑byte field, so passwords are 8–11
   characters on both pages (the stock Tesla page allowed 12, which overflowed the field).
 

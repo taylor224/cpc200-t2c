@@ -26,7 +26,14 @@
     's3.warn': 'Only for the Carlinkit T2C / TesPush T2C on firmware branch 1508 (version looks like 2609….1508.x). Keep the adapter powered until it is done.',
     's3.reply': 'A new tab shows the adapter’s reply. {"code": 0, "msg": "upload successful"} means the file was accepted; anything else means it was rejected and nothing was changed.',
     's4.title': 'Wait about five minutes', 's4.text': 'The adapter checks the file, reboots into recovery, writes the firmware and reboots again. Its Wi‑Fi disappears for about half a minute in the middle.',
-    's4.after': 'Afterwards http://192.168.3.1 shows the new settings page (reboot, Wi‑Fi password, channel, updates) and the car browser shows the new CarPlay page at tespush.com or carplay.lan/ (type the slash the first time). Future updates: Settings → About → Check for updates in the car, or Software on the phone page.',
+    's4.after': 'Afterwards http://192.168.3.1 (also http://setting.internal/) shows the new settings page (device name, reboot, Wi‑Fi password, channel, updates) and the car browser shows the new CarPlay page at tespush.com or http://carplay.internal/. Future updates: Settings → About → Check for updates in the car, or Software on the settings page.',
+    'p.send': 'Send', 'p.verify': 'Check',
+    'p.write': 'Write · reboot', 'p.done': 'Confirm',
+    'p.msg.send': 'Sending the file — confirm the browser’s “not secure” prompt in the new tab', 'p.msg.verify': 'The adapter checks and prepares the image',
+    'p.msg.write': 'Writing the firmware — the adapter’s Wi‑Fi disappears for about a minute', 'p.msg.done': 'It should be finished. Rejoin the adapter’s Wi‑Fi if needed and open the settings page to check the version.',
+    'p.elapsed': 'Elapsed {t}', 'p.left': 'about {t} left',
+    'p.estimate': 'Estimated from typical timings: this page (HTTPS on github.io) is not allowed to read the adapter’s status at http://192.168.3.1. The new tab shows the adapter’s actual reply.', 'p.open': 'Open the settings page',
+    'p.cancel': 'The reply was not code 0 — stop',
     'alt.title': 'Alternative: command line', 'alt.text': 'On a computer connected to the adapter’s Wi‑Fi, the same upload with curl:',
     'alt.hint': 'The repository also ships tools/flash.sh, which checks the partition sizes on the adapter before uploading and waits for it to come back.',
     'dl.start': 'Downloading…', 'dl.done': 'Saved. Continue with step 2.', 'dl.fail': 'Download failed; use the direct link.'
@@ -43,7 +50,14 @@
     's3.warn': 'Carlinkit T2C / TesPush T2C 펌웨어 1508 브랜치(버전이 2609….1508.x 형태) 전용입니다. 끝날 때까지 어댑터 전원을 유지하세요.',
     's3.reply': '새 탭에 어댑터 응답이 표시됩니다. {"code": 0, "msg": "upload successful"} 이면 파일이 접수된 것이고, 다른 응답이면 거부된 것이며 아무것도 바뀌지 않습니다.',
     's4.title': '약 5분 대기', 's4.text': '어댑터가 파일을 검사하고 복구 모드로 재부팅해 펌웨어를 쓴 뒤 다시 재부팅합니다. 중간에 Wi‑Fi가 30초 정도 사라집니다.',
-    's4.after': '끝나면 http://192.168.3.1 에 새 설정 페이지(재부팅, Wi‑Fi 비밀번호, 채널, 업데이트)가, 차량 브라우저에서는 tespush.com 또는 carplay.lan/ 로 새 CarPlay 페이지가 열립니다(처음엔 끝에 / 를 붙이세요). 이후 업데이트는 차에서 설정 → 정보 → 업데이트 확인, 또는 폰 페이지의 소프트웨어 항목에서.',
+    's4.after': '끝나면 http://192.168.3.1 (또는 http://setting.internal/)에 새 설정 페이지(기기 이름, 재부팅, Wi‑Fi 비밀번호, 채널, 업데이트)가, 차량 브라우저에서는 tespush.com 또는 http://carplay.internal/ 로 새 CarPlay 페이지가 열립니다. 이후 업데이트는 차에서 설정 → 정보 → 업데이트 확인, 또는 설정 페이지의 소프트웨어 항목에서.',
+    'p.send': '전송', 'p.verify': '검사',
+    'p.write': '쓰기 · 재부팅', 'p.done': '확인',
+    'p.msg.send': '파일 전송 중 — 새 탭에서 브라우저의 “안전하지 않음” 확인을 눌러 주세요', 'p.msg.verify': '어댑터가 이미지를 검사하고 준비하는 중',
+    'p.msg.write': '펌웨어 쓰는 중 — 어댑터 Wi‑Fi가 1분쯤 사라집니다', 'p.msg.done': '끝났을 시간입니다. 필요하면 어댑터 Wi‑Fi에 다시 접속한 뒤 설정 페이지에서 버전을 확인하세요.',
+    'p.elapsed': '경과 {t}', 'p.left': '약 {t} 남음',
+    'p.estimate': '일반적인 소요 시간으로 계산한 예상 진행입니다. 이 페이지(github.io, HTTPS)는 http://192.168.3.1 의 어댑터 상태를 읽을 수 없습니다. 실제 응답은 새 탭에 표시됩니다.', 'p.open': '설정 페이지 열기',
+    'p.cancel': '응답이 code 0이 아니었음 · 중단',
     'alt.title': '다른 방법: 명령줄', 'alt.text': '어댑터 Wi‑Fi에 연결된 컴퓨터에서 curl로 같은 업로드:',
     'alt.hint': '저장소의 tools/flash.sh는 업로드 전에 어댑터의 파티션 크기를 확인하고 복귀까지 기다립니다.',
     'dl.start': '다운로드 중…', 'dl.done': '저장됨. 2단계로 진행하세요.', 'dl.fail': '다운로드 실패 — 직접 링크를 사용하세요.'
@@ -60,7 +74,14 @@
     's3.warn': 'Carlinkit T2C / TesPush T2C のファームウェア 1508 系（バージョンが 2609….1508.x）専用です。完了までアダプターの電源を切らないでください。',
     's3.reply': '新しいタブにアダプターの応答が表示されます。{"code": 0, "msg": "upload successful"} なら受理、それ以外は拒否され何も変更されません。',
     's4.title': '約 5 分待つ', 's4.text': 'アダプターはファイルを検査し、リカバリーで再起動してファームウェアを書き込み、再度再起動します。途中で Wi‑Fi が 30 秒ほど消えます。',
-    's4.after': '完了後、http://192.168.3.1 に新しい設定ページ（再起動、Wi‑Fi パスワード、チャンネル、更新）、車のブラウザーでは tespush.com または carplay.lan/ で新しい CarPlay ページが開きます（初回は末尾に / を付けてください）。以後の更新は車で設定 → 情報 → 更新を確認、またはスマートフォンページのソフトウェアから。',
+    's4.after': '完了後、http://192.168.3.1（または http://setting.internal/）に新しい設定ページ（デバイス名、再起動、Wi‑Fi パスワード、チャンネル、更新）、車のブラウザーでは tespush.com または http://carplay.internal/ で新しい CarPlay ページが開きます。以後の更新は車で設定 → 情報 → 更新を確認、または設定ページのソフトウェアから。',
+    'p.send': '転送', 'p.verify': '検査',
+    'p.write': '書き込み · 再起動', 'p.done': '確認',
+    'p.msg.send': 'ファイル送信中 — 新しいタブでブラウザーの「保護されていない」確認を承認してください', 'p.msg.verify': 'アダプターがイメージを検査・準備しています',
+    'p.msg.write': 'ファームウェアを書き込み中 — アダプターの Wi‑Fi が 1 分ほど消えます', 'p.msg.done': '完了しているはずです。必要ならアダプターの Wi‑Fi に再接続し、設定ページでバージョンを確認してください。',
+    'p.elapsed': '経過 {t}', 'p.left': '残り約 {t}',
+    'p.estimate': '一般的な所要時間からの推定です。このページ（github.io、HTTPS）は http://192.168.3.1 のアダプターの状態を読み取れません。実際の応答は新しいタブに表示されます。', 'p.open': '設定ページを開く',
+    'p.cancel': '応答が code 0 ではなかった · 中止',
     'alt.title': '別の方法: コマンドライン', 'alt.text': 'アダプターの Wi‑Fi に接続した PC から curl で同じアップロード:',
     'alt.hint': 'リポジトリの tools/flash.sh はアップロード前にアダプターのパーティションサイズを確認し、復帰まで待ちます。',
     'dl.start': 'ダウンロード中…', 'dl.done': '保存しました。手順 2 へ。', 'dl.fail': 'ダウンロード失敗 — 直接リンクを使ってください。'
@@ -77,7 +98,14 @@
     's3.warn': '仅适用于 Carlinkit T2C / TesPush T2C 固件 1508 分支（版本形如 2609….1508.x）。完成前请保持适配器供电。',
     's3.reply': '新标签页显示适配器的回复。{"code": 0, "msg": "upload successful"} 表示已接受；其他回复表示被拒绝，未作任何更改。',
     's4.title': '等待约五分钟', 's4.text': '适配器检查文件，重启进入恢复模式写入固件，然后再次重启。中间 Wi‑Fi 会消失约半分钟。',
-    's4.after': '之后 http://192.168.3.1 显示新的设置页（重启、Wi‑Fi 密码、信道、更新），车机浏览器可通过 tespush.com 或 carplay.lan/ 打开新的 CarPlay 页面（首次请在末尾加 /）。以后更新：车内 设置 → 关于 → 检查更新，或手机页的软件。',
+    's4.after': '之后 http://192.168.3.1（或 http://setting.internal/）显示新的设置页（设备名称、重启、Wi‑Fi 密码、信道、更新），车机浏览器可通过 tespush.com 或 http://carplay.internal/ 打开新的 CarPlay 页面。以后更新：车内 设置 → 关于 → 检查更新，或设置页的软件。',
+    'p.send': '传输', 'p.verify': '校验',
+    'p.write': '写入 · 重启', 'p.done': '确认',
+    'p.msg.send': '正在发送文件 — 请在新标签页中确认浏览器的“不安全”提示', 'p.msg.verify': '适配器正在校验并准备镜像',
+    'p.msg.write': '正在写入固件 — 适配器的 Wi‑Fi 会消失约一分钟', 'p.msg.done': '应该已完成。如有需要请重新连接适配器的 Wi‑Fi，并在设置页确认版本。',
+    'p.elapsed': '已用 {t}', 'p.left': '约剩 {t}',
+    'p.estimate': '按常见耗时估算：本页面（github.io，HTTPS）无法读取 http://192.168.3.1 上适配器的状态。实际回复显示在新标签页中。', 'p.open': '打开设置页',
+    'p.cancel': '回复不是 code 0 · 停止',
     'alt.title': '另一种方式：命令行', 'alt.text': '在连接到适配器 Wi‑Fi 的电脑上用 curl 完成同样的上传：',
     'alt.hint': '仓库还提供 tools/flash.sh，上传前检查适配器的分区大小并等待其恢复。',
     'dl.start': '下载中…', 'dl.done': '已保存，继续第 2 步。', 'dl.fail': '下载失败 — 请使用直接链接。'
@@ -94,7 +122,14 @@
     's3.warn': '僅適用於 Carlinkit T2C / TesPush T2C 韌體 1508 分支（版本形如 2609….1508.x）。完成前請保持轉接器供電。',
     's3.reply': '新分頁會顯示轉接器的回覆。{"code": 0, "msg": "upload successful"} 表示已接受；其他回覆表示被拒絕，未做任何更改。',
     's4.title': '等待約五分鐘', 's4.text': '轉接器檢查檔案，重新啟動進入復原模式寫入韌體，然後再次重新啟動。中間 Wi‑Fi 會消失約半分鐘。',
-    's4.after': '之後 http://192.168.3.1 顯示新的設定頁（重新啟動、Wi‑Fi 密碼、頻道、更新），車機瀏覽器可透過 tespush.com 或 carplay.lan/ 開啟新的 CarPlay 頁面（首次請在結尾加 /）。日後更新：車內 設定 → 關於 → 檢查更新，或手機頁的軟體。',
+    's4.after': '之後 http://192.168.3.1（或 http://setting.internal/）顯示新的設定頁（裝置名稱、重新啟動、Wi‑Fi 密碼、頻道、更新），車機瀏覽器可透過 tespush.com 或 http://carplay.internal/ 開啟新的 CarPlay 頁面。日後更新：車內 設定 → 關於 → 檢查更新，或設定頁的軟體。',
+    'p.send': '傳輸', 'p.verify': '檢查',
+    'p.write': '寫入 · 重新啟動', 'p.done': '確認',
+    'p.msg.send': '正在傳送檔案 — 請在新分頁中確認瀏覽器的「不安全」提示', 'p.msg.verify': '轉接器正在檢查並準備映像檔',
+    'p.msg.write': '正在寫入韌體 — 轉接器的 Wi‑Fi 會消失約一分鐘', 'p.msg.done': '應該已完成。如有需要請重新連線轉接器的 Wi‑Fi，並在設定頁確認版本。',
+    'p.elapsed': '已過 {t}', 'p.left': '約剩 {t}',
+    'p.estimate': '依常見耗時估算：本頁面（github.io，HTTPS）無法讀取 http://192.168.3.1 上轉接器的狀態。實際回覆顯示在新分頁中。', 'p.open': '開啟設定頁',
+    'p.cancel': '回覆不是 code 0 · 停止',
     'alt.title': '另一種方式：命令列', 'alt.text': '在連到轉接器 Wi‑Fi 的電腦上用 curl 完成同樣的上傳：',
     'alt.hint': '儲存庫也提供 tools/flash.sh，上傳前會檢查轉接器的分割區大小並等待其恢復。',
     'dl.start': '下載中…', 'dl.done': '已儲存，請繼續第 2 步。', 'dl.fail': '下載失敗 — 請使用直接連結。'
@@ -109,7 +144,11 @@
     if (n.indexOf('zh') === 0) return (/tw|hk|mo|hant/.test(n)) ? 'zh-TW' : 'zh-CN';
     return 'en';
   }
-  function t(k) { return (T[lang] && T[lang][k]) || T.en[k] || k; }
+  function t(k, vars) {
+    var s = (T[lang] && T[lang][k]) || T.en[k] || k;
+    if (vars) Object.keys(vars).forEach(function (v) { s = s.replace('{' + v + '}', vars[v]); });
+    return s;
+  }
   function applyLang() {
     document.documentElement.lang = lang;
     var els = document.querySelectorAll('[data-i18n]');
@@ -155,12 +194,58 @@
     }).catch(function () { $('dl-msg').textContent = t('dl.fail'); $('btn-download').disabled = false; });
   }
 
+  /* Install progress. The adapter is plain HTTP on the local network and this page is HTTPS,
+   * so the browser blocks every way of reading its state from here; the stages below follow
+   * the timings measured on the bench (upload a few seconds plus the browser's warning,
+   * ~4.5 min checking/preparing, ~45 s writing and rebooting). */
+  var STAGES = ['send', 'verify', 'write', 'done'];
+  var PLAN = [['send', 30], ['verify', 270], ['write', 45]];   // seconds
+  var TOTAL = 345, KEY = 't2c.install.t0', timer = 0;
+  function fmtTime(sec) { sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ':' + ('0' + sec % 60).slice(-2); }
+  function render() {
+    var t0 = +sessionStorage.getItem(KEY) || 0;
+    if (!t0) return;
+    var el = (Date.now() - t0) / 1000, at = 0, name = 'done', frac = 1;
+    for (var i = 0; i < PLAN.length; i++) {
+      if (el < at + PLAN[i][1]) { name = PLAN[i][0]; frac = (el - at) / PLAN[i][1]; break; }
+      at += PLAN[i][1];
+    }
+    var idx = STAGES.indexOf(name), lis = $('inst-stages').querySelectorAll('li');
+    for (var k = 0; k < lis.length; k++) lis[k].className = (k < idx || name === 'done') ? 'done' : k === idx ? 'now' : '';
+    var pct = name === 'done' ? 100 : Math.min(99, el / TOTAL * 100);
+    $('inst-prog').classList.remove('hidden');
+    $('inst-bar').style.width = pct + '%';
+    $('inst-pct').textContent = Math.floor(pct) + '%';
+    $('inst-msg').textContent = t('p.msg.' + name);
+    $('inst-eta').textContent = t('p.elapsed', { t: fmtTime(el) }) + (name === 'done' ? '' : ' · ' + t('p.left', { t: fmtTime(TOTAL - el) }));
+    $('inst-open').classList.toggle('hidden', name !== 'done');
+    $('inst-cancel').classList.toggle('hidden', name === 'done');
+    if (name === 'done' || el > TOTAL + 600) { clearInterval(timer); timer = 0; }
+    if (el > TOTAL + 600) stopProgress();
+  }
+  function startProgress() {
+    sessionStorage.setItem(KEY, String(Date.now()));
+    if (!timer) timer = setInterval(render, 1000);
+    render();
+    $('inst-prog').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function stopProgress() {
+    sessionStorage.removeItem(KEY);
+    clearInterval(timer); timer = 0;
+    $('inst-prog').classList.add('hidden');
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     lang = pickLang(localStorage.getItem('t2c.lang'));
     $('lang').value = localStorage.getItem('t2c.lang') || 'auto';
-    $('lang').onchange = function () { localStorage.setItem('t2c.lang', this.value); lang = pickLang(this.value); applyLang(); };
+    $('lang').onchange = function () { localStorage.setItem('t2c.lang', this.value); lang = pickLang(this.value); applyLang(); render(); };
     applyLang();
     $('btn-download').onclick = download;
+    // the form posts into a new tab (the adapter's reply); this tab shows the estimate
+    $('upload-form').addEventListener('submit', function () { startProgress(); });
+    $('inst-cancel').onclick = stopProgress;
+    if (sessionStorage.getItem(KEY)) { timer = setInterval(render, 1000); render(); }
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) render(); });
     loadLatest();
   });
 })();

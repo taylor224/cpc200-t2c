@@ -4,13 +4,16 @@
     tools/otamock.py [--port 8792] [--www src/ota-www] [--hw BT_Network] [--branch 1508]
 
 Serves the page and answers the CGI queries the page makes, so the UI can be checked in a
-browser without an adapter. Reboot/upload only pretend (a short offline window).
+browser without an adapter. Reboot/rename only pretend (a short offline window); an upload
+plays the adapter's install sequence: update 2 for --verify-secs, offline for --offline-secs,
+then back with a new appver.
 """
-import argparse, json, os, sys, time, urllib.parse
+import argparse, json, os, re, sys, time, urllib.parse
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 STATE = {'pix': 1, 'sig': 161, 'btnet': 0, 'name': 'AutoKit_051E', 'update': 0, 'offline_until': 0,
-         'appver': '26090414.1508.1', 'psk': 'mockpass1'}
+         'appver': '26090414.1508.1', 'psk': 'mockpass1', 'install_t0': 0,
+         'devname': '', 'carname': 'Auto', 'btname': 'AutoKit_051E'}
 BOOT = time.time() - 3600 * 5
 
 
@@ -27,8 +30,21 @@ class H(SimpleHTTPRequestHandler):
         body = s.encode(); self.send_response(code); self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
 
+    def install_phase(self):
+        t0 = STATE['install_t0']
+        if not t0:
+            return
+        el = time.time() - t0
+        if el < self.server.verify_secs:
+            STATE['update'] = 2
+        elif el < self.server.verify_secs + self.server.offline_secs:
+            STATE['offline_until'] = t0 + self.server.verify_secs + self.server.offline_secs
+        else:
+            STATE['install_t0'] = 0; STATE['update'] = 0; STATE['appver'] = '26099999.1508.1'
+
     def do_GET(self):
         u = urllib.parse.urlsplit(self.path); q = urllib.parse.parse_qs(u.query)
+        self.install_phase()
         if time.time() < STATE['offline_until']:
             self.close_connection = True; return
         if u.path == '/cgi-bin/index.cgi':
@@ -56,7 +72,10 @@ class H(SimpleHTTPRequestHandler):
                 return self._json({'code': 0, 'uptime': int(time.time() - BOOT), 'load': '0.42 0.38 0.35', 'mem_total_kb': 119864, 'mem_avail_kb': 61208,
                                    'udisk': {'total_kb': 1824, 'used_kb': 612, 'avail_kb': 1212}, 'tmp': {'total_kb': 59932, 'used_kb': 4120, 'avail_kb': 55812},
                                    'ssid': STATE['name'], 'psk': STATE['psk'], 'channel': STATE['sig'], 'hostapd': 1, 'clients': 2,
-                                   'appver': STATE['appver'], 'lycfg': 1, 'wifi_edit': int(self.server.wifi_edit), 'cgi': 1})
+                                   'appver': STATE['appver'], 'lycfg': 1, 'wifi_edit': int(self.server.wifi_edit),
+                                   'devname': STATE['devname'], 'carname': STATE['carname'], 'btname': STATE['btname'], 'cgi': 3})
+            if a == 'unname':
+                STATE['devname'] = ''; return self._json({'code': 0})
             if a == 'reboot':
                 STATE['offline_until'] = time.time() + 10; return self._json({'code': 0})
             if a == 'log':
@@ -73,10 +92,17 @@ class H(SimpleHTTPRequestHandler):
         u = urllib.parse.urlsplit(self.path); q = urllib.parse.parse_qs(u.query)
         n = int(self.headers.get('Content-Length') or 0); body = self.rfile.read(n)
         if u.path == '/cgi-bin/index.cgi' and q.get('id', [''])[0] == 'upload':
-            STATE['update'] = 2
-            STATE['offline_until'] = time.time() + 12
-            STATE['appver'] = '26099999.1508.1'
+            STATE['update'] = 2; STATE['install_t0'] = time.time()
             return self._json({'code': 0, 'msg': 'upload successful', 'size': len(body)})
+        if u.path == '/cgi-bin/t2c.cgi' and q.get('a', [''])[0] == 'name':
+            b = body.decode(errors='replace')
+            if not b.startswith('name='): return self._json({'code': 3, 'msg': 'no name'})
+            name = b[5:]
+            if not re.match(r'^[A-Za-z0-9_.-]([A-Za-z0-9 _.-]{0,10}[A-Za-z0-9_.-])?$', name):
+                return self._json({'code': 5, 'msg': 'unsupported character'})
+            STATE['devname'] = STATE['btname'] = STATE['carname'] = name
+            STATE['offline_until'] = time.time() + 6
+            return self._json({'code': 0, 'car': 1})
         if u.path == '/cgi-bin/t2c.cgi' and q.get('a', [''])[0] == 'channel':
             b = body.decode(errors='replace')
             if not b.startswith('ch='): return self._json({'code': 4, 'msg': 'unsupported channel'})
@@ -100,10 +126,12 @@ def main():
     p.add_argument('--www', default=os.path.join(os.path.dirname(__file__), '..', 'src', 'ota-www'))
     p.add_argument('--hw', default='BT_Network')
     p.add_argument('--wifi-edit', type=int, default=0)
+    p.add_argument('--verify-secs', type=float, default=20, help='install: seconds with update=2 (adapter: ~270)')
+    p.add_argument('--offline-secs', type=float, default=10, help='install: seconds offline (adapter: ~30-60)')
     a = p.parse_args()
     os.chdir(a.www)
     srv = ThreadingHTTPServer(('127.0.0.1', a.port), H)
-    srv.hw = a.hw; srv.wifi_edit = a.wifi_edit
+    srv.hw = a.hw; srv.wifi_edit = a.wifi_edit; srv.verify_secs = a.verify_secs; srv.offline_secs = a.offline_secs
     print('otamock on http://127.0.0.1:%d/ (www=%s hw=%s wifi_edit=%d)' % (a.port, os.getcwd(), a.hw, a.wifi_edit)); sys.stdout.flush()
     srv.serve_forever()
 

@@ -58,6 +58,19 @@
   <section class="card">
     <h2><span class="step">4</span><span data-i18n="s4.title"></span></h2>
     <p data-i18n="s4.text"></p>
+    <div id="inst-prog" class="prog hidden">
+      <ol class="stages" id="inst-stages">
+        <li data-s="send" data-i18n="p.send"></li><li data-s="verify" data-i18n="p.verify"></li><li data-s="write" data-i18n="p.write"></li><li data-s="done" data-i18n="p.done"></li>
+      </ol>
+      <div class="bar"><div id="inst-bar"></div></div>
+      <div class="prog-line"><span id="inst-msg"></span><b id="inst-pct"></b></div>
+      <p class="hint" id="inst-eta"></p>
+      <div class="actions">
+        <a class="btn btn-primary hidden" id="inst-open" href="http://192.168.3.1/" target="_blank" rel="noopener" data-i18n="p.open"></a>
+        <button class="btn" type="button" id="inst-cancel" data-i18n="p.cancel"></button>
+      </div>
+      <p class="hint" data-i18n="p.estimate"></p>
+    </div>
     <p class="hint" data-i18n="s4.after"></p>
   </section>
 

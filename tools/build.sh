@@ -59,9 +59,29 @@ EOF
 find "$WORK/customer/app/www" -type f -exec chmod 755 {} +   # match original image (all 0755)
 find "$WORK/customer/app/www" -type d -exec chmod 755 {} +
 
-echo "== patch app/lylinkui (built-in DNS answers carplay.lan)"
+echo "== patch app/lylinkui (built-in DNS answers carplay.internal, setting.internal)"
 python3 tools/patch_lylinkui.py "$WORK/customer/app/lylinkui"
 chmod 755 "$WORK/customer/app/lylinkui"
+
+echo "== app/blink.sh: Bluetooth name from the phone page (/mnt/UDISK/t2c_name)"
+# gocsdk gets its Bluetooth name from BT_NAME (set by the rootfs init). blink.sh already
+# waits for /mnt/UDISK, so the name saved by t2c.cgi?a=name can replace it right there.
+python3 - "$WORK/customer/app/blink.sh" <<'EOF'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+hook = """# T2C firmware: device name chosen on the phone page (t2c.cgi?a=name)
+if [ -s /mnt/UDISK/t2c_name ]; then
+	T2C_NAME=`head -c 12 /mnt/UDISK/t2c_name | tr -cd 'A-Za-z0-9 _.-'`
+	[ -n "$T2C_NAME" ] && BT_NAME="$T2C_NAME"
+fi
+"""
+anchor = 'echo "run gocsdk BT_NAME=$BT_NAME"\n'
+assert s.count(anchor) == 1 and s.count('-N$BT_NAME') == 2, 'unexpected blink.sh'
+s = s.replace(anchor, hook + anchor).replace('-N$BT_NAME', '-N"$BT_NAME"')
+open(p, 'w').write(s)
+EOF
+chmod 755 "$WORK/customer/app/blink.sh"
 
 if [ -n "${T2C_VERSION:-}" ]; then
   echo "== version: $T2C_VERSION (app/system.json)"
