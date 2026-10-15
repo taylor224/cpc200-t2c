@@ -115,3 +115,38 @@ itself, so it cannot be read from the update image. The OTA CGI's `id=set&wifi=N
 only changes the AP channel and restarts `lyhostapd`; nothing on the HTTP side
 reboots the adapter without side effects. Open ports: 80 (OTA), 443 (Tesla UI), 7000
 (AirPlay/CarPlay). No telnet, ssh, or adb.
+
+## Real device (2026-10-15)
+
+Flashed `build/T2C-tesla-ui.img` (customer squashfs 6,311,936 B) with `tools/flash.sh --yes`
+over the `AutoKit_051E` hotspot. Timeline: upload accepted (`{"code": 0}`) → `id=host`
+reports `update: 2` → after ~4.5 min the adapter drops off for ~25 s (recovery writes
+boot + customer) → back with `appver 26090414.1508.1` and the new `app/www` served by
+`lylinkui`. The phone‑facing OTA page at `http://192.168.3.1/` is byte‑identical.
+
+Flash layout (w25q128, 16 MiB, from a fresh‑boot dmesg; RAM 128 MiB, 119,864 KiB free):
+
+```
+0x000000-0x060000 uboot      384 KiB
+0x060000-0x0a0000 env        256 KiB
+0x0a0000-0x2c0000 boot      2176 KiB   (kernel uImage 2,224,376 B — 3.8 KiB spare)
+0x2c0000-0x4e0000 recovery  2176 KiB
+0x4e0000-0x7e0000 rootfs    3072 KiB
+0x7e0000-0xe20000 customer  6400 KiB   (squashfs 6,311,936 B — 236 KiB spare)
+0xe20000-0xe30000 private     64 KiB
+0xe30000-end      UDISK    ~1856 KiB   (declared larger than the chip; truncated)
+```
+`sw-description` has no `type`, so SWUpdate's raw handler writes `/dev/by-name/customer`
+(`mtdblock5`); an image larger than 6,553,600 B would be cut off and corrupt the
+partition. `tools/flash.sh` refuses to upload unless the sizes above are read from the
+device log first.
+
+Browser check against the real adapter (headless Chrome 155, 773×601 @ DPR 1.53, host
+rule `tespush.com → 192.168.3.1`): the user's iPhone joined on its own; the H.264 worker
+path was selected (`cp-canvas-worker` 768×608), the CarPlay home screen rendered
+edge‑to‑edge, decode 2.3 ms per frame, 0 dropped. On a static screen the adapter sends
+no frames (`rx 0`), so a throughput figure needs motion on the phone. One finding fixed
+afterwards: the `{link,phone}` message can arrive before the init JSON, so the page briefly
+started MJPEG (`video.jpg` 404) while the adapter was in H.264 mode (commit `3be0260`).
+Note for testing from a Mac: `101.200.208.6` is routed to the internet, not the adapter;
+use `--resolve tespush.com:443:192.168.3.1` or the AP address.

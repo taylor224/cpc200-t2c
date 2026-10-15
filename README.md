@@ -70,9 +70,10 @@ About page (the final location is still to be decided).
   COOP/COEP headers needed for threads). Intel‑era cars (MCU2) may not sustain 30 fps
   at the *Sharp* size; use *Balanced* or let Automatic fall back to MJPEG. JPEG quality
   in MJPEG mode is fixed inside the adapter binaries.
-- The `customer` squashfs grows by about 250 KB (6.07 → 6.31 MB; xz compresses the decoder well). Check the
-  partition size before flashing: `curl -s 'http://192.168.3.1/cgi-bin/index.cgi?id=logcat' |
-  gunzip | grep -i customer` shows the MTD layout from `dmesg`.
+- The `customer` squashfs grows by about 250 KB (6.07 → 6.31 MB; xz compresses the decoder well).
+  The partition is 6,553,600 B on the 16 MiB SPI NOR of the tested unit (236 KB spare), and the
+  kernel fills its `boot` partition to within 4 KB — do not add to `kernel`. `tools/flash.sh`
+  reads the layout from the adapter's own boot log and refuses to upload an image that does not fit.
 
 ## Build
 
@@ -96,17 +97,23 @@ extensions it does not know, and `.wasm` is not in its table.
 
 ## Flash
 
-Join the adapter's Wi‑Fi (`TesPush_T2C_xxxx`) and upload the image to the OTA endpoint:
+Join the adapter's Wi‑Fi (`AutoKit_xxxx`, password printed on the device or set in the
+phone app), power‑cycle the adapter so its boot log still holds the partition table, then:
 
 ```
-curl -v -F 'file=@build/T2C-tesla-ui.img;filename=update.img' \
-     'http://192.168.3.1/cgi-bin/index.cgi?id=upload'
+tools/flash.sh build/T2C-tesla-ui.img          # pre-flight only: version, image, partition sizes
+tools/flash.sh build/T2C-tesla-ui.img --yes    # upload, then wait for the adapter to return
 ```
 
-Expected reply: `{"code": 0, "msg": "upload successful"}`. Keep the adapter powered; it
-reboots into recovery, writes `boot` + `customer`, and reboots again. Only use this on
-firmware branch **1508** (`http://192.168.3.1/cgi-bin/index.cgi?id=host` shows the version).
-Flashing can brick the adapter; there is no A/B fallback.
+The script uploads to the OTA endpoint (`POST /cgi-bin/index.cgi?id=upload`), expects
+`{"code": 0, "msg": "upload successful"}`, and watches for the reboot. Keep the adapter
+powered: `id=host` shows `update: 2` for a few minutes, the adapter then drops off for
+about half a minute while recovery writes `boot` + `customer`, and comes back on the new
+version. Only use this on firmware branch **1508**. There is no A/B fallback.
+
+Tested on 2026‑10‑15 on a 1508 unit: flashed from `26020416.1508.1`, came back as
+`26090414.1508.1` serving the new UI; the iPhone reconnected and the H.264 path ran at
+about 2 ms decode per frame in a Chromium 155 test at the Tesla viewport.
 
 ## Develop
 
