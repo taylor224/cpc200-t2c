@@ -25,7 +25,7 @@
     'home.bt_name': 'Bluetooth name', 'home.show_qr': 'Show QR code', 'home.hide_qr': 'Hide QR code',
     'home.qr_hint': 'Scan with the iPhone camera', 'home.connecting': 'Connecting…',
     'home.waiting': 'Waiting for iPhone', 'home.connected': 'iPhone connected',
-    'home.starting': 'Starting CarPlay…', 'home.open_carplay': 'Open CarPlay',
+    'home.starting': 'Starting CarPlay…', 'home.open_carplay': 'Open CarPlay', 'home.car_ui': 'iPhone connected · settings',
     'home.open_settings': 'Settings', 'home.last_device': 'Last connected',
 
     'dev.auto': 'Auto connect', 'dev.auto_hint': 'Reconnect to the last iPhone automatically',
@@ -106,7 +106,7 @@
     'home.bt_name': '블루투스 이름', 'home.show_qr': 'QR 코드 보기', 'home.hide_qr': 'QR 코드 숨기기',
     'home.qr_hint': 'iPhone 카메라로 스캔하세요', 'home.connecting': '연결 중…',
     'home.waiting': 'iPhone을 기다리는 중', 'home.connected': 'iPhone 연결됨',
-    'home.starting': 'CarPlay 시작 중…', 'home.open_carplay': 'CarPlay 열기',
+    'home.starting': 'CarPlay 시작 중…', 'home.open_carplay': 'CarPlay 열기', 'home.car_ui': 'iPhone 연결됨 · 설정',
     'home.open_settings': '설정', 'home.last_device': '최근 연결',
 
     'dev.auto': '자동 연결', 'dev.auto_hint': '마지막으로 연결한 iPhone에 자동으로 다시 연결합니다',
@@ -187,7 +187,7 @@
     'home.bt_name': 'Bluetooth 名', 'home.show_qr': 'QR コードを表示', 'home.hide_qr': 'QR コードを隠す',
     'home.qr_hint': 'iPhone のカメラでスキャン', 'home.connecting': '接続中…',
     'home.waiting': 'iPhone を待っています', 'home.connected': 'iPhone 接続済み',
-    'home.starting': 'CarPlay を開始中…', 'home.open_carplay': 'CarPlay を開く',
+    'home.starting': 'CarPlay を開始中…', 'home.open_carplay': 'CarPlay を開く', 'home.car_ui': 'iPhone 接続済み · 設定',
     'home.open_settings': '設定', 'home.last_device': '最後に接続',
 
     'dev.auto': '自動接続', 'dev.auto_hint': '最後に接続した iPhone に自動で再接続します',
@@ -268,7 +268,7 @@
     'home.bt_name': '蓝牙名称', 'home.show_qr': '显示二维码', 'home.hide_qr': '隐藏二维码',
     'home.qr_hint': '用 iPhone 相机扫描', 'home.connecting': '连接中…',
     'home.waiting': '等待 iPhone', 'home.connected': 'iPhone 已连接',
-    'home.starting': '正在启动 CarPlay…', 'home.open_carplay': '打开 CarPlay',
+    'home.starting': '正在启动 CarPlay…', 'home.open_carplay': '打开 CarPlay', 'home.car_ui': 'iPhone 已连接 · 设置',
     'home.open_settings': '设置', 'home.last_device': '上次连接',
 
     'dev.auto': '自动连接', 'dev.auto_hint': '自动重新连接上次使用的 iPhone',
@@ -349,7 +349,7 @@
     'home.bt_name': '藍牙名稱', 'home.show_qr': '顯示 QR Code', 'home.hide_qr': '隱藏 QR Code',
     'home.qr_hint': '用 iPhone 相機掃描', 'home.connecting': '連線中…',
     'home.waiting': '等待 iPhone', 'home.connected': 'iPhone 已連線',
-    'home.starting': '正在啟動 CarPlay…', 'home.open_carplay': '開啟 CarPlay',
+    'home.starting': '正在啟動 CarPlay…', 'home.open_carplay': '開啟 CarPlay', 'home.car_ui': 'iPhone 已連線 · 設定',
     'home.open_settings': '設定', 'home.last_device': '上次連線',
 
     'dev.auto': '自動連線', 'dev.auto_hint': '自動重新連線上次使用的 iPhone',

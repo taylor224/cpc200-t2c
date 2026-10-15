@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build a patched T2C firmware image: base image -> replace app/www with src/www -> repack.
+# Build a patched T2C firmware image: base image -> replace app/www with src/www and the
+# phone-facing ota/www page with src/ota-www (keeping the stock index.cgi and lan/) -> repack.
 #
 #   tools/build.sh [BASE_IMG] [OUT_IMG]
 #
@@ -54,6 +55,15 @@ for n in range(3):
 EOF
 find "$WORK/customer/app/www" -type f -exec chmod 755 {} +   # match original image (all 0755)
 find "$WORK/customer/app/www" -type d -exec chmod 755 {} +
+
+echo "== overlay src/ota-www -> ota/www (phone page at http://192.168.3.1/)"
+[ -f "$WORK/customer/ota/www/cgi-bin/index.cgi" ] || { echo "stock ota/www/cgi-bin/index.cgi missing" >&2; exit 1; }
+rm -rf "$WORK/customer/ota/www/index.html" "$WORK/customer/ota/www/css" "$WORK/customer/ota/www/js"
+rsync -a --exclude '.DS_Store' --exclude '*.map' src/ota-www/ "$WORK/customer/ota/www/"
+head -1 "$WORK/customer/ota/www/cgi-bin/t2c.cgi" | grep -q '^#!/bin/sh' || { echo "t2c.cgi must start with #!/bin/sh" >&2; exit 1; }
+grep -q $'\r' "$WORK/customer/ota/www/cgi-bin/t2c.cgi" && { echo "t2c.cgi has CRLF line endings" >&2; exit 1; }
+find "$WORK/customer/ota/www" -type f -exec chmod 755 {} +
+find "$WORK/customer/ota/www" -type d -exec chmod 755 {} +
 
 echo "== mksquashfs"
 rm -f "$WORK/customer.sqfs"

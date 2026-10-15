@@ -55,6 +55,34 @@ for f in sorted(os.listdir(os.path.join(WWW, 'js'))):
         r = subprocess.run(['node', '--check', os.path.join(WWW, 'js', f)], capture_output=True, text=True)
         check(r.returncode == 0, 'node --check js/%s' % f + ('' if r.returncode == 0 else '\n' + r.stderr))
 
+# 5b. phone page (src/ota-www): JS syntax, i18n parity, CGI script syntax, no leftover SDKs
+OTA = os.path.join(ROOT, 'src', 'ota-www')
+r = subprocess.run(['node', '--check', os.path.join(OTA, 'js', 'ota.js')], capture_output=True, text=True)
+check(r.returncode == 0, 'node --check ota-www/js/ota.js' + ('' if r.returncode == 0 else '\n' + r.stderr))
+ota_js = open(os.path.join(OTA, 'js', 'ota.js'), encoding='utf-8').read()
+ota_tables = {}
+for m in re.finditer(r"T(?:\.(\w+)|\['([\w-]+)'\])\s*=\s*\{(.*?)\n  \};", ota_js, re.S):
+    ota_tables[m.group(1) or m.group(2)] = set(re.findall(r"'([a-z]+(?:\.[a-z0-9_]+)?)':", m.group(3)))
+check(set(ota_tables) == {'en', 'ko', 'ja', 'zh-CN', 'zh-TW'}, 'ota-www: five language tables: ' + ', '.join(sorted(ota_tables)))
+ota_en = ota_tables.get('en', set())
+for name, keys in ota_tables.items():
+    diff = sorted(ota_en ^ keys)
+    check(not diff, 'ota-www keys of %s match en' % name + ('' if not diff else ': ' + ', '.join(diff)))
+ota_html = open(os.path.join(OTA, 'index.html'), encoding='utf-8').read()
+missing_ota = sorted(k for k in set(re.findall(r'data-i18n="([^"]+)"', ota_html)) if k not in ota_en)
+check(not missing_ota, 'ota-www: all data-i18n keys exist' + ('' if not missing_ota else ': ' + ', '.join(missing_ota)))
+ota_js_keys = set(re.findall(r"\bt\('([a-z]+(?:\.[a-z0-9_]+)?)'", ota_js))
+missing_ota_js = sorted(k for k in ota_js_keys if k not in ota_en)
+check(not missing_ota_js, 'ota-www: all t() keys exist' + ('' if not missing_ota_js else ': ' + ', '.join(missing_ota_js)))
+ota_ids = set(re.findall(r"\$\('([a-zA-Z0-9_-]+)'\)", ota_js)); ota_dom = set(re.findall(r'id="([^"]+)"', ota_html))
+missing_ids = sorted(i for i in ota_ids if i not in ota_dom)
+check(not missing_ids, 'ota-www: all $(id) targets exist' + ('' if not missing_ids else ': ' + ', '.join(missing_ids)))
+cgi = os.path.join(OTA, 'cgi-bin', 't2c.cgi')
+r = subprocess.run(['sh', '-n', cgi], capture_output=True, text=True)
+check(r.returncode == 0, 'sh -n ota-www/cgi-bin/t2c.cgi' + ('' if r.returncode == 0 else '\n' + r.stderr))
+check(open(cgi, 'rb').read().startswith(b'#!/bin/sh\n') and b'\r' not in open(cgi, 'rb').read(), 't2c.cgi: #!/bin/sh shebang, LF line endings')
+check(not os.path.exists(os.path.join(OTA, 'js', 'aliyun-oss-sdk.min.js')), 'ota-www: no Aliyun OSS SDK')
+
 # 6. total size budget (the adapter copies www into RAM at boot)
 total = 0
 for d, _, fs in os.walk(WWW):

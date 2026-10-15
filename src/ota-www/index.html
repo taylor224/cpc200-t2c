@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Cache-Control" content="no-store">
+<title>TesPush T2C</title>
+<link rel="stylesheet" href="/css/ota.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="brand-name">CARPLAY</span><span class="brand-sub">TesPush T2C</span></div>
+  <select id="lang" class="lang" aria-label="Language">
+    <option value="auto">Auto</option>
+    <option value="en">English</option>
+    <option value="ko">한국어</option>
+    <option value="ja">日本語</option>
+    <option value="zh-CN">简体中文</option>
+    <option value="zh-TW">繁體中文</option>
+  </select>
+</header>
+<main>
+  <div id="banner" class="banner hidden"></div>
+
+  <section class="card">
+    <h2 data-i18n="sec.status"></h2>
+    <div class="row"><span data-i18n="st.wifi"></span><b id="st-ssid">—</b></div>
+    <div class="row"><span data-i18n="st.channel"></span><b id="st-ch">—</b></div>
+    <div class="row"><span data-i18n="st.fw"></span><b id="st-fw">—</b></div>
+    <div class="row"><span data-i18n="st.hw"></span><b id="st-hw">—</b></div>
+    <div class="row"><span>UUID</span><b id="st-uuid">—</b></div>
+    <div class="row"><span data-i18n="st.uptime"></span><b id="st-uptime">—</b></div>
+    <div class="row"><span data-i18n="st.mem"></span><b id="st-mem">—</b></div>
+    <div class="row"><span data-i18n="st.clients"></span><b id="st-clients">—</b></div>
+  </section>
+
+  <section class="card">
+    <h2>CarPlay</h2>
+    <div class="row"><span data-i18n="cp.res"></span>
+      <div class="seg" id="seg-pix"><button data-v="1">HD</button><button data-v="2">SD</button><button data-v="3" data-i18n="cp.auto"></button></div></div>
+    <p class="hint" data-i18n="cp.res_hint"></p>
+    <div class="row" id="row-icon" hidden><span data-i18n="cp.icon"></span>
+      <div class="seg" id="seg-icon"><button data-v="">HOME</button><button data-v="tsl0Tesla">Tesla</button></div></div>
+    <div class="row" id="row-btnet" hidden><span data-i18n="cp.btnet"></span>
+      <div class="seg" id="seg-btnet"><button data-v="0" data-i18n="off"></button><button data-v="1" data-i18n="on"></button></div></div>
+  </section>
+
+  <section class="card">
+    <h2>Wi‑Fi</h2>
+    <div class="row"><span data-i18n="wifi.channel"></span><select id="sel-ch" class="select"></select></div>
+    <p class="hint" data-i18n="wifi.channel_hint"></p>
+    <div id="wifi-edit" hidden>
+      <label class="field"><span data-i18n="wifi.ssid"></span><input id="in-ssid" maxlength="32" autocomplete="off" autocapitalize="off"></label>
+      <label class="field"><span data-i18n="wifi.psk"></span>
+        <div class="pw"><input id="in-psk" type="password" maxlength="63" autocomplete="new-password"><button type="button" id="btn-show" class="btn-ghost" data-i18n="show"></button></div></label>
+      <p class="hint" data-i18n="wifi.psk_hint"></p>
+      <div class="actions"><button class="btn btn-primary" id="btn-wifi-save" data-i18n="save"></button></div>
+    </div>
+    <div id="wifi-view" hidden>
+      <div class="row"><span data-i18n="wifi.psk"></span><b><span id="wifi-psk-text">••••••••</span> <button type="button" id="btn-show-view" class="btn-ghost" data-i18n="show"></button></b></div>
+      <p class="hint" data-i18n="wifi.noedit"></p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="sec.system"></h2>
+    <div class="actions">
+      <button class="btn" id="btn-reboot" data-i18n="sys.reboot"></button>
+      <a class="btn" id="btn-log" href="/cgi-bin/t2c.cgi?a=log" download="t2c-log.txt" data-i18n="sys.log"></a>
+      <button class="btn btn-danger" id="btn-reset" data-i18n="sys.reset"></button>
+    </div>
+    <details class="diag"><summary data-i18n="sys.diag"></summary>
+      <div class="diag-btns" id="diag-btns"></div>
+      <pre id="diag-out"></pre>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="sec.software"></h2>
+    <div class="row"><span data-i18n="sw.current"></span><b id="sw-cur">—</b></div>
+    <label class="field"><span data-i18n="sw.server"></span><input id="in-server" placeholder="https://…" inputmode="url" autocomplete="off" autocapitalize="off"></label>
+    <div class="actions">
+      <button class="btn" id="btn-check" data-i18n="sw.check"></button>
+      <label class="btn" for="in-file" data-i18n="sw.upload"></label><input type="file" id="in-file" accept=".img,application/octet-stream" hidden>
+    </div>
+    <div id="sw-result" class="result hidden">
+      <div><b id="sw-new"></b><br><span id="sw-note" class="hint"></span></div>
+      <div class="actions"><button class="btn btn-primary" id="btn-install" data-i18n="sw.install"></button></div>
+    </div>
+    <div id="sw-prog" class="prog hidden"><div class="bar"><div id="sw-bar"></div></div><div id="sw-msg"></div></div>
+  </section>
+  <footer class="foot" id="foot"></footer>
+</main>
+<div id="toast" class="toast hidden"></div>
+<div id="modal" class="modal hidden"><div class="modal-box"><p id="modal-text"></p>
+  <div class="actions"><button class="btn" id="modal-cancel" data-i18n="cancel"></button><button class="btn btn-primary" id="modal-ok" data-i18n="ok"></button></div></div></div>
+<script src="/js/ota.js"></script>
+</body>
+</html>

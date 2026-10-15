@@ -47,6 +47,7 @@
     icon: '', icons: {}, lyver: '',
     btconn: null, btdelay: null, btdel: null,
     pixel: 3, vid: false,
+    carUi: false,          // iPhone asked for the car's own UI (Carlinkit app tapped in CarPlay)
     updating: false, updateUrl: null,
     hasCell: true
   };
@@ -220,12 +221,15 @@
     console.log('link ' + state.link + ' -> ' + newLink);
     var prev = state.link;
     state.link = newLink;
+    // 2 -> 1 while the phone stays connected means the user opened the Carlinkit app
+    // inside CarPlay: the adapter stops the video and expects this page to show its menu.
+    state.carUi = newLink === 1 && prev > 1;
     try {
       if (newLink > 1) {
         link.cmd(CMD.VIDEO);
         startVideo();
       } else {
-        if (prev > 1) stopVideo();
+        if (prev > 1) { stopVideo(); showPage('home'); }
         if (newLink === 0) presenter.clear();
       }
     } catch (e) { console.error('video switch', e); }
@@ -250,6 +254,8 @@
     open.hidden = true; steps.classList.remove('hidden');
     if (state.link > 1) {
       txt.textContent = t('home.connected'); dot.classList.add('ok'); open.hidden = false; steps.classList.add('hidden');
+    } else if (state.link === 1 && state.carUi) {
+      txt.textContent = t('home.car_ui'); dot.classList.add('ok'); open.hidden = false; steps.classList.add('hidden');
     } else if (state.link === 1) {
       txt.textContent = t('home.starting'); spin.classList.remove('hidden'); dot.classList.add('hidden'); open.hidden = false; steps.classList.add('hidden');
     } else if (state.linking) {
