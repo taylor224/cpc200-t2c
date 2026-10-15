@@ -1,9 +1,11 @@
 # Carlinkit T2C — Tesla web UI rebuild
 
 Custom firmware build for the Carlinkit **T2C** (TesPush T2C, hardware branch `1508`) that
-replaces the adapter's Tesla‑browser web interface. The device binaries are untouched;
-only `app/www` inside the `customer` squashfs partition is rebuilt, so the phone‑facing
-OTA page at `http://192.168.3.1/` (`ota/www`) stays exactly as shipped.
+replaces the adapter's Tesla‑browser web interface and the phone‑facing settings page.
+The device binaries are untouched; only `app/www` (Tesla page) and `ota/www` (phone page
+at `http://192.168.3.1/`) inside the `customer` squashfs partition are rebuilt. The stock
+`index.cgi` keeps handling settings and firmware upload; a small shell CGI adds reboot,
+password change, log download and diagnostics.
 
 ## Why
 
@@ -57,6 +59,21 @@ only persist zh‑CN/zh‑TW/en, so the choice is kept in the browser's storage)
 **Firmware update server**: `CONFIG.UPDATE_BASE_URL` in `src/www/js/app.js`. It can be
 overridden at runtime with `?test=<url>` in the page URL or the *Update server* field on the
 About page (the final location is still to be decided).
+
+**Phone page (`http://192.168.3.1/`, `src/ota-www`)**
+- Same design language as the Tesla page, five languages, dark mode follows the phone.
+- Status (network, channel, firmware, hardware, UUID, uptime, memory, connected devices),
+  resolution and channel (stock `index.cgi?id=set`), **reboot**, **Wi‑Fi password change**
+  (writes the adapter's own settings file and reboots; the network name is derived by the
+  firmware and cannot be changed), factory reset with confirmation, plain‑text log download,
+  diagnostics (hostapd config, settings file, MTD table, mounts, processes, U‑Boot env …),
+  update check against an editable server URL, install from the server or from a local file
+  with reboot monitoring. The feedback upload to Carlinkit's cloud and the 536 KB Aliyun SDK
+  are gone.
+- `cgi-bin/t2c.cgi` only knows fixed actions (`info`, `reboot`, `log`, `cat&f=<name>` from a
+  whitelist, `wifi`); nothing from the request reaches a shell command.
+- The adapter stores the Wi‑Fi password in a 12‑byte field, so passwords are 8–11
+  characters on both pages (the stock Tesla page allowed 12, which overflowed the field).
 
 ## Not changed / limitations
 

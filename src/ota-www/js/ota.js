@@ -19,8 +19,8 @@
     'cp.res': 'Resolution', 'cp.auto': 'Auto', 'cp.res_hint': 'HD 1376×1072, SD 800×800, Auto follows the Tesla page. The Tesla page can override this per session.',
     'cp.icon': 'Car icon', 'cp.btnet': 'BT modem', 'on': 'On', 'off': 'Off',
     'wifi.channel': 'Channel', 'wifi.channel_hint': 'Changing the channel restarts the hotspot; your phone reconnects by itself.',
-    'wifi.ssid': 'Network name', 'wifi.psk': 'Password', 'wifi.psk_hint': '8–63 characters. The iPhone and the Tesla must join the new network afterwards.',
-    'wifi.noedit': 'Change the password from the Tesla screen (Wi‑Fi page) or the Carlinkit app.',
+    'wifi.psk': 'Password', 'wifi.psk_hint': '8–11 characters (letters, digits, ! @ # $ ^ * ( ) _ - . , : ; ? ~). The adapter reboots; the iPhone and the Tesla must rejoin with the new password.',
+    'wifi.noedit': 'No saved settings file yet — set a password once from the Tesla screen (Wi‑Fi page), then it can be changed here.',
     'save': 'Save', 'show': 'Show', 'hide': 'Hide', 'ok': 'OK', 'cancel': 'Cancel',
     'sec.system': 'System', 'sys.reboot': 'Reboot', 'sys.log': 'Download log', 'sys.reset': 'Factory reset', 'sys.diag': 'Diagnostics',
     'sec.software': 'Software', 'sw.current': 'Installed', 'sw.server': 'Update server (leave empty for default)',
@@ -32,7 +32,7 @@
     'q.channel': 'Switch the hotspot to channel {ch}?', 'q.install': 'Install version {v}?',
     'msg.rebooting': 'Rebooting… this page reconnects by itself', 'msg.back': 'Adapter is back online', 'msg.offline': 'Adapter not reachable — join its Wi‑Fi',
     'msg.saved': 'Saved', 'msg.fail': 'Failed', 'msg.reset': 'Resetting… the hotspot name and password return to their defaults',
-    'msg.psk_short': 'Password must be 8–63 characters', 'msg.ssid_empty': 'Network name is empty'
+    'msg.psk_short': 'Password must be 8–11 characters', 'msg.psk_chars': 'Unsupported character in password'
   };
   T.ko = {
     'sec.status': '상태', 'st.wifi': 'Wi‑Fi 네트워크', 'st.channel': '채널', 'st.fw': '펌웨어', 'st.hw': '하드웨어',
@@ -40,8 +40,8 @@
     'cp.res': '해상도', 'cp.auto': '자동', 'cp.res_hint': 'HD 1376×1072, SD 800×800, 자동은 테슬라 페이지를 따릅니다. 테슬라 페이지에서 세션마다 덮어쓸 수 있습니다.',
     'cp.icon': '차량 아이콘', 'cp.btnet': 'BT 모뎀', 'on': '켬', 'off': '끔',
     'wifi.channel': '채널', 'wifi.channel_hint': '채널을 바꾸면 핫스팟이 재시작되고 폰이 자동으로 다시 접속합니다.',
-    'wifi.ssid': '네트워크 이름', 'wifi.psk': '비밀번호', 'wifi.psk_hint': '8–63자. 변경 후 iPhone과 테슬라가 새 네트워크에 다시 접속해야 합니다.',
-    'wifi.noedit': '비밀번호 변경은 테슬라 화면(Wi‑Fi 페이지) 또는 Carlinkit 앱에서 할 수 있습니다.',
+    'wifi.psk': '비밀번호', 'wifi.psk_hint': '8–11자(영문, 숫자, ! @ # $ ^ * ( ) _ - . , : ; ? ~). 어댑터가 재부팅되며 iPhone과 테슬라가 새 비밀번호로 다시 접속해야 합니다.',
+    'wifi.noedit': '저장된 설정 파일이 아직 없습니다 — 테슬라 화면(Wi‑Fi 페이지)에서 비밀번호를 한 번 설정하면 여기서도 바꿀 수 있습니다.',
     'save': '저장', 'show': '보기', 'hide': '숨기기', 'ok': '확인', 'cancel': '취소',
     'sec.system': '시스템', 'sys.reboot': '재부팅', 'sys.log': '로그 다운로드', 'sys.reset': '공장 초기화', 'sys.diag': '진단 정보',
     'sec.software': '소프트웨어', 'sw.current': '설치된 버전', 'sw.server': '업데이트 서버 (비우면 기본값)',
@@ -53,7 +53,7 @@
     'q.channel': '핫스팟을 {ch} 채널로 바꿀까요?', 'q.install': '버전 {v}을(를) 설치할까요?',
     'msg.rebooting': '재부팅 중… 이 페이지가 자동으로 다시 연결됩니다', 'msg.back': '어댑터가 다시 켜졌습니다', 'msg.offline': '어댑터에 연결할 수 없습니다 — 어댑터 Wi‑Fi에 접속하세요',
     'msg.saved': '저장됨', 'msg.fail': '실패', 'msg.reset': '초기화 중… 핫스팟 이름과 비밀번호가 기본값으로 돌아갑니다',
-    'msg.psk_short': '비밀번호는 8–63자여야 합니다', 'msg.ssid_empty': '네트워크 이름이 비어 있습니다'
+    'msg.psk_short': '비밀번호는 8–11자여야 합니다', 'msg.psk_chars': '비밀번호에 쓸 수 없는 문자가 있습니다'
   };
   T.ja = {
     'sec.status': '状態', 'st.wifi': 'Wi‑Fi ネットワーク', 'st.channel': 'チャンネル', 'st.fw': 'ファームウェア', 'st.hw': 'ハードウェア',
@@ -61,8 +61,8 @@
     'cp.res': '解像度', 'cp.auto': '自動', 'cp.res_hint': 'HD 1376×1072、SD 800×800、自動は Tesla ページに従います。Tesla ページ側でセッションごとに上書きできます。',
     'cp.icon': '車のアイコン', 'cp.btnet': 'BT モデム', 'on': 'オン', 'off': 'オフ',
     'wifi.channel': 'チャンネル', 'wifi.channel_hint': 'チャンネルを変更するとホットスポットが再起動し、スマートフォンは自動で再接続します。',
-    'wifi.ssid': 'ネットワーク名', 'wifi.psk': 'パスワード', 'wifi.psk_hint': '8〜63 文字。変更後は iPhone と Tesla を新しいネットワークに接続し直してください。',
-    'wifi.noedit': 'パスワードの変更は Tesla 画面（Wi‑Fi ページ）または Carlinkit アプリから行えます。',
+    'wifi.psk': 'パスワード', 'wifi.psk_hint': '8〜11 文字（英数字と ! @ # $ ^ * ( ) _ - . , : ; ? ~）。アダプターが再起動し、iPhone と Tesla は新しいパスワードで接続し直す必要があります。',
+    'wifi.noedit': '保存された設定ファイルがまだありません。Tesla 画面（Wi‑Fi ページ）で一度パスワードを設定すると、ここでも変更できます。',
     'save': '保存', 'show': '表示', 'hide': '隠す', 'ok': 'OK', 'cancel': 'キャンセル',
     'sec.system': 'システム', 'sys.reboot': '再起動', 'sys.log': 'ログをダウンロード', 'sys.reset': '初期化', 'sys.diag': '診断情報',
     'sec.software': 'ソフトウェア', 'sw.current': 'インストール済み', 'sw.server': '更新サーバー（空欄で既定）',
@@ -74,7 +74,7 @@
     'q.channel': 'ホットスポットをチャンネル {ch} に切り替えますか？', 'q.install': 'バージョン {v} をインストールしますか？',
     'msg.rebooting': '再起動中… このページは自動で再接続します', 'msg.back': 'アダプターがオンラインに戻りました', 'msg.offline': 'アダプターに接続できません — アダプターの Wi‑Fi に接続してください',
     'msg.saved': '保存しました', 'msg.fail': '失敗', 'msg.reset': '初期化中… ホットスポット名とパスワードは既定値に戻ります',
-    'msg.psk_short': 'パスワードは 8〜63 文字です', 'msg.ssid_empty': 'ネットワーク名が空です'
+    'msg.psk_short': 'パスワードは 8〜11 文字です', 'msg.psk_chars': 'パスワードに使用できない文字があります'
   };
   T['zh-CN'] = {
     'sec.status': '状态', 'st.wifi': 'Wi‑Fi 网络', 'st.channel': '信道', 'st.fw': '固件', 'st.hw': '硬件',
@@ -82,8 +82,8 @@
     'cp.res': '分辨率', 'cp.auto': '自动', 'cp.res_hint': 'HD 1376×1072，SD 800×800，自动跟随 Tesla 页面。Tesla 页面可按会话覆盖此设置。',
     'cp.icon': '车辆图标', 'cp.btnet': 'BT 调制解调器', 'on': '开', 'off': '关',
     'wifi.channel': '信道', 'wifi.channel_hint': '更改信道会重启热点，手机会自动重新连接。',
-    'wifi.ssid': '网络名称', 'wifi.psk': '密码', 'wifi.psk_hint': '8–63 个字符。更改后 iPhone 和 Tesla 需要重新加入新网络。',
-    'wifi.noedit': '可在 Tesla 屏幕（Wi‑Fi 页面）或 Carlinkit 应用中修改密码。',
+    'wifi.psk': '密码', 'wifi.psk_hint': '8–11 个字符（字母、数字、! @ # $ ^ * ( ) _ - . , : ; ? ~）。适配器会重启，iPhone 和 Tesla 需用新密码重新连接。',
+    'wifi.noedit': '尚无已保存的设置文件 — 先在 Tesla 屏幕（Wi‑Fi 页面）设置一次密码，之后即可在此修改。',
     'save': '保存', 'show': '显示', 'hide': '隐藏', 'ok': '确定', 'cancel': '取消',
     'sec.system': '系统', 'sys.reboot': '重启', 'sys.log': '下载日志', 'sys.reset': '恢复出厂设置', 'sys.diag': '诊断信息',
     'sec.software': '软件', 'sw.current': '已安装', 'sw.server': '更新服务器（留空使用默认）',
@@ -95,7 +95,7 @@
     'q.channel': '将热点切换到信道 {ch}？', 'q.install': '安装版本 {v}？',
     'msg.rebooting': '重启中… 本页面会自动重新连接', 'msg.back': '适配器已恢复在线', 'msg.offline': '无法连接适配器 — 请加入其 Wi‑Fi',
     'msg.saved': '已保存', 'msg.fail': '失败', 'msg.reset': '重置中… 热点名称和密码恢复为默认值',
-    'msg.psk_short': '密码须为 8–63 个字符', 'msg.ssid_empty': '网络名称为空'
+    'msg.psk_short': '密码须为 8–11 个字符', 'msg.psk_chars': '密码包含不支持的字符'
   };
   T['zh-TW'] = {
     'sec.status': '狀態', 'st.wifi': 'Wi‑Fi 網路', 'st.channel': '頻道', 'st.fw': '韌體', 'st.hw': '硬體',
@@ -103,8 +103,8 @@
     'cp.res': '解析度', 'cp.auto': '自動', 'cp.res_hint': 'HD 1376×1072，SD 800×800，自動跟隨 Tesla 頁面。Tesla 頁面可依工作階段覆寫此設定。',
     'cp.icon': '車輛圖示', 'cp.btnet': 'BT 數據機', 'on': '開', 'off': '關',
     'wifi.channel': '頻道', 'wifi.channel_hint': '更改頻道會重新啟動熱點，手機會自動重新連線。',
-    'wifi.ssid': '網路名稱', 'wifi.psk': '密碼', 'wifi.psk_hint': '8–63 個字元。更改後 iPhone 與 Tesla 需重新加入新網路。',
-    'wifi.noedit': '可在 Tesla 螢幕（Wi‑Fi 頁面）或 Carlinkit App 中修改密碼。',
+    'wifi.psk': '密碼', 'wifi.psk_hint': '8–11 個字元（字母、數字、! @ # $ ^ * ( ) _ - . , : ; ? ~）。轉接器會重新啟動，iPhone 與 Tesla 需以新密碼重新連線。',
+    'wifi.noedit': '尚無已儲存的設定檔 — 先在 Tesla 螢幕（Wi‑Fi 頁面）設定一次密碼，之後即可在此修改。',
     'save': '儲存', 'show': '顯示', 'hide': '隱藏', 'ok': '確定', 'cancel': '取消',
     'sec.system': '系統', 'sys.reboot': '重新啟動', 'sys.log': '下載記錄', 'sys.reset': '恢復原廠設定', 'sys.diag': '診斷資訊',
     'sec.software': '軟體', 'sw.current': '已安裝', 'sw.server': '更新伺服器（留空使用預設）',
@@ -116,7 +116,7 @@
     'q.channel': '將熱點切換到頻道 {ch}？', 'q.install': '安裝版本 {v}？',
     'msg.rebooting': '重新啟動中… 本頁面會自動重新連線', 'msg.back': '轉接器已恢復連線', 'msg.offline': '無法連線轉接器 — 請加入其 Wi‑Fi',
     'msg.saved': '已儲存', 'msg.fail': '失敗', 'msg.reset': '重設中… 熱點名稱與密碼恢復為預設值',
-    'msg.psk_short': '密碼須為 8–63 個字元', 'msg.ssid_empty': '網路名稱為空'
+    'msg.psk_short': '密碼須為 8–11 個字元', 'msg.psk_chars': '密碼包含不支援的字元'
   };
 
   var lang = 'en';
@@ -213,7 +213,7 @@
       if (j.channel) { $('st-ch').textContent = j.channel; $('sel-ch').value = String(j.channel); }
       $('wifi-edit').hidden = !j.wifi_edit;
       $('wifi-view').hidden = !!j.wifi_edit;
-      $('in-ssid').value = j.ssid || ''; $('in-psk').value = j.psk || '';
+      $('in-psk').value = j.psk || '';
       $('wifi-psk-text').textContent = '••••••••';
     }).catch(function () { info = null; $('wifi-view').hidden = false; });
   }
@@ -378,11 +378,12 @@
       el.textContent = shown ? '••••••••' : ((info && info.psk) || '—'); this.textContent = t(shown ? 'show' : 'hide');
     };
     $('btn-wifi-save').onclick = function () {
-      var ssid = $('in-ssid').value.trim(), psk = $('in-psk').value;
-      if (!ssid) { toast(t('msg.ssid_empty')); return; }
-      if (psk.length < 8 || psk.length > 63) { toast(t('msg.psk_short')); return; }
-      fetch('/cgi-bin/t2c.cgi?a=wifi', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'ssid=' + encodeURIComponent(ssid) + '&psk=' + encodeURIComponent(psk) })
+      var psk = $('in-psk').value;
+      // The adapter stores the password in a 12-byte field (11 characters max); the body is
+      // sent verbatim, so the character set excludes anything that would need escaping.
+      if (psk.length < 8 || psk.length > 11) { toast(t('msg.psk_short')); return; }
+      if (!/^[A-Za-z0-9!@#$^*()_.,:;?~-]+$/.test(psk)) { toast(t('msg.psk_chars'), 4000); return; }
+      fetch('/cgi-bin/t2c.cgi?a=wifi', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'psk=' + psk })
         .then(function (r) { return r.json(); })
         .then(function (j) { if (j.code !== 0) throw new Error(j.msg || ('code ' + j.code)); waitForReboot(t('msg.rebooting')); })
         .catch(function (e) { toast(t('msg.fail') + ' (' + e.message + ')', 4000); });

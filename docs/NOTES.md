@@ -150,3 +150,29 @@ afterwards: the `{link,phone}` message can arrive before the init JSON, so the p
 started MJPEG (`video.jpg` 404) while the adapter was in H.264 mode (commit `3be0260`).
 Note for testing from a Mac: `101.200.208.6` is routed to the internet, not the adapter;
 use `--resolve tespush.com:443:192.168.3.1` or the AP address.
+
+## Settings file `/mnt/UDISK/lycfg.txt` (lylinkui `lycfg_read/write`)
+
+Binary, exactly 556 bytes, read and written whole (`fread/fwrite(…, 1, 556)`, a read
+shorter than 548 bytes is rejected). Lives at `this+0x458` inside lylinkui's main object:
+
+```
++0   u8  night            +1  u8 pixel (3 = auto)      +2  u8 driver
++3   u8  0x4d  +4 u8 0x3c (unknown)                    +5  u8 channel (161)
++6   u8  temp channel (0xff = none)                    +7  u8 0
++8   char psk[12]        Wi‑Fi password, NUL‑terminated → at most 11 characters
++20  char name[12]       car name shown on iOS ("Auto")
+…    zeros
++548 u8 btnet, +549 0, +550 u8 mode (1 = H.264 video), tail zeros
+```
+The WebSocket type‑9 message does `memcpy(this+0x460, payload, len)` and only writes the
+terminator when `len <= 11`; a 12‑byte password therefore runs into `name`. After storing
+it lylinkui regenerates `/tmp/hostapd.conf` from `/etc/wifi/hostapd.conf` (replacing the
+`ssid=`, `channel=`, `ht_capab=`, `wpa_passphrase=` lines), restarts hostapd and restarts
+the CarPlay session. The SSID is `custom_name` from the U‑Boot env plus four hex digits and
+is never stored. `t2c.cgi?a=wifi` rewrites the 12‑byte field in the file and reboots so
+lylinkui reloads it (its in‑memory copy would otherwise overwrite the file later).
+
+The phone page's helper CGI runs as root under busybox httpd; `reboot` works from there
+(the adapter drops off after ~7 s). The Mac tends to roam away from `AutoKit_051E` while
+the hotspot is down, hence the rejoin loop in `tools/flash.sh` (`T2C_SSID`/`T2C_PSK`).

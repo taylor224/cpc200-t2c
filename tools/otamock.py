@@ -78,9 +78,12 @@ class H(SimpleHTTPRequestHandler):
             STATE['appver'] = '26099999.1508.1'
             return self._json({'code': 0, 'msg': 'upload successful', 'size': len(body)})
         if u.path == '/cgi-bin/t2c.cgi' and q.get('a', [''])[0] == 'wifi':
-            f = urllib.parse.parse_qs(body.decode())
-            if not self.server.wifi_edit: return self._json({'code': 2, 'msg': 'not supported by this build'})
-            STATE['name'] = f.get('ssid', [STATE['name']])[0]; STATE['psk'] = f.get('psk', [STATE['psk']])[0]
+            b = body.decode(errors='replace')
+            if not self.server.wifi_edit: return self._json({'code': 6, 'msg': 'config file missing'})
+            if not b.startswith('psk='): return self._json({'code': 3, 'msg': 'no psk'})
+            psk = b[4:]
+            if not 8 <= len(psk) <= 11: return self._json({'code': 4, 'msg': 'password must be 8-11 characters'})
+            STATE['psk'] = psk
             STATE['offline_until'] = time.time() + 6
             return self._json({'code': 0})
         return self._json({'code': 1}, 404)

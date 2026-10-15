@@ -452,7 +452,9 @@
   function passwordDialog() {
     if (!requireLink()) return;
     var content = document.createElement('div');
-    var input = document.createElement('input'); input.className = 'field'; input.type = 'text'; input.maxLength = 12;
+    // The adapter keeps the password in a 12-byte field and only terminates it when the
+    // payload is 11 bytes or shorter, so 12 characters would run into the next field.
+    var input = document.createElement('input'); input.className = 'field'; input.type = 'text'; input.maxLength = 11;
     input.placeholder = t('wifi.pw_new');
     var rule = document.createElement('p'); rule.className = 'muted small'; rule.style.marginTop = '0.5rem'; rule.textContent = t('wifi.pw_rule');
     content.appendChild(input); content.appendChild(rule);
@@ -461,7 +463,7 @@
       title: t('wifi.pw_title'), text: t('wifi.pw_warn'), content: content,
       buttons: [{ label: t('dlg.cancel') }, { label: t('dlg.save'), primary: true, keep: true, onClick: function () {
         var v = input.value;
-        if (v.length < 8) { input.focus(); return; }
+        if (v.length < 8 || v.length > 11) { input.focus(); return; }
         if (link.setWifiPassword(v)) {
           link.close();
           dialog({ text: t('wifi.pw_changed') + '\n' + v, buttons: [{ label: t('dlg.ok'), primary: true, onClick: reload }] });

@@ -7,7 +7,10 @@
 #   GET  ?a=reboot        reply, then reboot two seconds later
 #   GET  ?a=log           plain-text dmesg + logcat (not obfuscated like id=logcat)
 #   GET  ?a=cat&f=NAME    one of a fixed list of diagnostic files / listings
-#   POST ?a=wifi          change SSID / password (only when info.wifi_edit is 1)
+#   POST ?a=wifi          body "psk=<new password>": store it in the adapter's config
+#                         (/mnt/UDISK/lycfg.txt, 12-byte field at offset 8 = max 11 chars,
+#                         exactly what the Tesla page's type-9 message writes) and reboot.
+#                         The network name is derived by the firmware and cannot be set.
 
 A=''; F=''
 OLDIFS=$IFS; IFS='&'
@@ -47,8 +50,8 @@ info)
     "$(num "${up%%.*}")" "$(je "$load")" "$(num "$memt")" "$(num "$mema")"
   set -- $ud; printf ',"udisk":{"total_kb":%s,"used_kb":%s,"avail_kb":%s}' "$(num "$1")" "$(num "$2")" "$(num "$3")"
   set -- $tp; printf ',"tmp":{"total_kb":%s,"used_kb":%s,"avail_kb":%s}' "$(num "$1")" "$(num "$2")" "$(num "$3")"
-  printf ',"ssid":"%s","psk":"%s","channel":%s,"hostapd":%s,"clients":%s,"appver":"%s","lycfg":%s,"wifi_edit":0,"cgi":1}' \
-    "$(je "$ssid")" "$(je "$psk")" "$(num "$ch")" "$hap" "$(num "$cl")" "$(je "$appver")" "$lycfg"
+  printf ',"ssid":"%s","psk":"%s","channel":%s,"hostapd":%s,"clients":%s,"appver":"%s","lycfg":%s,"wifi_edit":%s,"cgi":2}' \
+    "$(je "$ssid")" "$(je "$psk")" "$(num "$ch")" "$hap" "$(num "$cl")" "$(je "$appver")" "$lycfg" "$lycfg"
   ;;
 reboot)
   json_hdr; printf '{"code":0}'
@@ -77,8 +80,9 @@ cat)
     ps)              cmd='ps' ;;
     env)             cmd='fw_printenv' ;;
     ifconfig)        cmd='ifconfig' ;;
+    bt_conf)         f=/mnt/UDISK/bt_conf.ini ;;
     private)         cmd="tr -c '[:print:]\n' '\n' < /dev/mtdblock6 | grep -v '^$' | head -300" ;;
-    *) printf 'Status: 404 Not Found\r\nContent-Type: text/plain\r\n\r\nunknown file\n'; exit 0 ;;
+    *) printf 'HTTP/1.0 404 Not Found\r\nContent-Type: text/plain\r\n\r\nunknown file\n'; exit 0 ;;
   esac
   text_hdr
   if [ -n "$f" ]; then
@@ -88,10 +92,27 @@ cat)
   fi
   ;;
 wifi)
-  json_hdr; printf '{"code":2,"msg":"not supported by this build"}'
+  CFG=/mnt/UDISK/lycfg.txt
+  body=''
+  [ "${REQUEST_METHOD:-GET}" = POST ] && [ "${CONTENT_LENGTH:-0}" -gt 0 ] && [ "${CONTENT_LENGTH:-0}" -le 256 ] && body=$(head -c "$CONTENT_LENGTH" | tr -d '\r\n')
+  psk=${body#psk=}
+  json_hdr
+  if [ "$psk" = "$body" ] || [ -z "$psk" ]; then printf '{"code":3,"msg":"no psk"}'; exit 0; fi
+  n=$(printf '%s' "$psk" | wc -c | tr -d ' ')
+  if [ "$n" -lt 8 ] || [ "$n" -gt 11 ]; then printf '{"code":4,"msg":"password must be 8-11 characters"}'; exit 0; fi
+  bad=$(printf '%s' "$psk" | tr -d 'A-Za-z0-9!@#$^*()_.,:;?~-' | wc -c | tr -d ' ')
+  if [ "$bad" -ne 0 ]; then printf '{"code":5,"msg":"unsupported character"}'; exit 0; fi
+  if [ ! -f "$CFG" ] || [ "$(wc -c < "$CFG" | tr -d ' ')" -ne 556 ]; then printf '{"code":6,"msg":"config file missing; set a password from the Tesla screen first"}'; exit 0; fi
+  { head -c 8 "$CFG"; printf '%s' "$psk"; i=$n; while [ "$i" -lt 12 ]; do printf '\000'; i=$((i+1)); done; tail -c +21 "$CFG"; } > "$CFG.new"
+  if [ "$(wc -c < "$CFG.new" | tr -d ' ')" -ne 556 ]; then rm -f "$CFG.new"; printf '{"code":7,"msg":"write failed"}'; exit 0; fi
+  mv "$CFG.new" "$CFG" && sync
+  # Also patch the live hostapd config so the file on disk and in RAM agree; the reboot applies it.
+  [ -f $HOSTAPD ] && sed -i "s/^wpa_passphrase=.*/wpa_passphrase=$psk/" $HOSTAPD 2>/dev/null
+  printf '{"code":0}'
+  ( sleep 2; sync; reboot || /sbin/reboot || busybox reboot ) </dev/null >/dev/null 2>&1 &
   ;;
 *)
-  printf 'Status: 400 Bad Request\r\nContent-Type: application/json\r\n\r\n{"code":1,"msg":"unknown action"}'
+  printf 'HTTP/1.0 400 Bad Request\r\nContent-Type: application/json\r\n\r\n{"code":1,"msg":"unknown action"}'
   ;;
 esac
 exit 0
