@@ -269,8 +269,10 @@ up); from then on every query is dropped.
 
 `tools/patch_lylinkui.py` (applied by `tools/build.sh`, checked by `tools/verify.sh`)
 puts `carplay.internal` and `setting.internal` into the two duplicate slots (2 and 5), keeps
-answering table names while disabled, and leaves everything else exactly as before
-(online: drop, including the `tesla` catch‑all). The wire‑format names live in the zero
+answering table names while disabled, and — since 26101508 — answers every other name
+with REFUSED while disabled instead of silence (the stock REFUSED builder at 0x20d18:
+RCODE 5 into the header, the query sent back; it needs only r4/r5/r6, which the cave
+leaves alone). The `tesla` catch‑all stays off in that state. The wire‑format names live in the zero
 padding after the r‑x segment (file 0x1c690, the segment's `p_filesz`/`p_memsz` grow from
 0x1c68c to 0x1c6b4, still far below the data segment at 0x1cb40). The per‑query debug log
 call is the code cave: one branch handles "no match while disabled → drop", a second one
@@ -285,14 +287,15 @@ is reserved for private use (ICANN 2024) and is not HSTS‑preloaded; `.play`/`.
 names ending in a number are not URLs. Chromium treats an unknown suffix typed without a
 scheme as a search, so type `http://` or a trailing slash the first time.
 
-Open point: while the phone has internet, a client only gets these names if its resolver
-asks the adapter (third DNS server in DHCP, after 8.8.8.8 and 114.114.114.114). A resolver
-that sends to all servers at once (musl, connman's proxy) takes the adapter's answer, which
-arrives first; one that asks 8.8.8.8 first and accepts its NXDOMAIN (glibc) does not. Offline
-it always works. Moving 192.168.3.1 to the front of `app/udhcpd.conf` would fix that but
-also routes every lookup of the car through the adapter first; that needs the online "drop"
-turned into REFUSED, and leaves the `tesla` catch‑all in charge whenever the adapter's own
-online check fails — not done without a test in the car.
+Resolver order: with the stock DHCP list (8.8.8.8 first) a client that asks the first
+server and accepts its NXDOMAIN — macOS, glibc, the Tesla's Chromium — never sees the
+adapter's answer while the phone has internet (`DNS_PROBE_FINISHED_NXDOMAIN` on the bench,
+2026-10-15, with `dig @192.168.3.1 carplay.internal` answering fine). Since 26101508
+`app/udhcpd.conf` lists the adapter first (`192.168.3.1 8.8.8.8 1.1.1.1`): table names are
+answered at once, everything else gets REFUSED while the phone is online and the client
+moves on to 8.8.8.8 (one local round trip). While the adapter's own online check fails the
+stock `tesla` catch‑all answers first instead of last — the same fake connectivity the stock
+design relies on, just without the public‑resolver timeouts before it.
 
 ## Device name (Bluetooth name, CarPlay car name)
 

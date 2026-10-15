@@ -103,15 +103,18 @@ cp src/www/icon/ck00.png "$WORK/customer/app/Auto.png"
 chmod 755 "$WORK/customer/app/Auto.png"
 
 echo "== app/udhcpd.conf: resolver list for the car"
-# Stock hands out 8.8.8.8, 114.114.114.114 (China) and the adapter. 114 answers from Korea
-# but 2-3x slower than 1.1.1.1; the adapter stays last (it answers carplay.internal).
+# Stock hands out 8.8.8.8, 114.114.114.114 (China) and the adapter last. The adapter goes
+# first so that carplay.internal / setting.internal resolve while the phone has internet
+# (public resolvers say NXDOMAIN and the car takes that); the patched lylinkui answers
+# REFUSED for every other name in that state, so the car moves on to 8.8.8.8 at once.
+# 114 answers from Korea but 2-3x slower than 1.1.1.1.
 python3 - "$WORK/customer/app/udhcpd.conf" <<'EOF'
 import sys
 p = sys.argv[1]
 s = open(p).read()
 a = 'opt     dns     8.8.8.8 114.114.114.114 192.168.3.1'
 assert s.count(a) == 1, 'unexpected udhcpd.conf'
-open(p, 'w').write(s.replace(a, 'opt     dns     8.8.8.8 1.1.1.1 192.168.3.1'))
+open(p, 'w').write(s.replace(a, 'opt     dns     192.168.3.1 8.8.8.8 1.1.1.1'))
 EOF
 
 echo "== overlay src/ota-www -> ota/www (phone page at http://192.168.3.1/)"

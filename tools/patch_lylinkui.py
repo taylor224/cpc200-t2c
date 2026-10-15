@@ -21,8 +21,14 @@ After this patch:
     phone-facing settings page served by busybox httpd);
   * table names are answered in both states, so the names work whether or not the phone
     has internet;
-  * while the phone has internet, every other name is still dropped exactly as before,
-    in particular the "tesla" catch-all stays off;
+  * while the phone has internet, every other name gets REFUSED instead of silence, so a
+    resolver that asks the adapter first moves on to the next server at once (the DHCP list
+    now starts with the adapter, otherwise 8.8.8.8's NXDOMAIN wins for the .internal names);
+    the "tesla" catch-all stays off in that state;
+  * table answers carry ARCOUNT 0: stock copies the query header, so a query with an EDNS
+    OPT record got a reply that announced an additional record it did not contain, which
+    macOS/iOS (mDNSResponder, always EDNS) discard as malformed and then take 8.8.8.8's
+    NXDOMAIN — and cache it for a day;
   * the per-query debug log line ("q: <name>, type:<n>") is gone; its call site holds the
     code caves.
 
@@ -40,6 +46,7 @@ TEXT_PHDR = 0x94                                           # program header of t
 
 DROP = 0x20d94           # "no reply, back to select()" in process_request
 NO_MATCH = 0x20bc4       # start of the "tesla" catch-all / REFUSED path
+REFUSED = 0x20d18        # RCODE 5 into the header, send the query back (needs only r4/r5/r6)
 TABLE_LOOP = 0x20b74     # load table {count, entries} and start comparing
 CAVE = 0x20b40           # inside the removed logging block
 IP_CAVE = 0x20b50        # after CAVE, same block
@@ -73,6 +80,8 @@ LDR_R3_SP_18 = struct.pack('<I', 0xE59D3018)
 CMP_R3_0 = struct.pack('<I', 0xE3530000)
 LDR_R3_R3 = struct.pack('<I', 0xE5933000)
 LDRB_R2_R8_1 = struct.pack('<I', 0xE5D82001)     # first character of the first label
+MOV_R2_0 = struct.pack('<I', 0xE3A02000)
+STRH_R2_R11_10 = struct.pack('<I', 0xE1CB20BA)   # ARCOUNT of the reply (r11 = header) = 0
 CMP_R2_S = struct.pack('<I', 0xE3520073)         # 's': only setting.internal starts \x07s
 
 
@@ -108,14 +117,15 @@ def main():
     # 1. keep processing while "disabled" (was: bne DROP)
     put(0x20ab0, MOV_R0_R0, expect=b_insn(NE, 0x20ab0, DROP))
     # 2. replace the print_domain log call with the setup it interleaved, plus two caves:
-    #    CAVE: no table match -> if disabled (stack flag still holds the disable value) drop,
-    #          otherwise continue with the stock catch-all / REFUSED path
+    #    CAVE: no table match -> if disabled (stack flag still holds the disable value) answer
+    #          REFUSED (stock: silence), otherwise continue with the stock catch-all / REFUSED path
     #    IP_CAVE: table answer for setting.internal carries 192.168.3.1 instead of the
-    #          Tesla-UI address (r8 still points at the question name here)
+    #          Tesla-UI address (r8 still points at the question name here), and the reply's
+    #          ARCOUNT is cleared (r11 is still the header; stock echoes the query's count)
     block = (MOV_R7_0 + add_r8_sp_348 + b_insn(AL, 0x20b3c, TABLE_LOOP) +
-             LDR_R3_SP_18 + CMP_R3_0 + b_insn(NE, 0x20b48, DROP) + b_insn(AL, 0x20b4c, NO_MATCH) +
+             LDR_R3_SP_18 + CMP_R3_0 + b_insn(NE, 0x20b48, REFUSED) + b_insn(AL, 0x20b4c, NO_MATCH) +
              LDR_R3_R3 + LDRB_R2_R8_1 + CMP_R2_S + movw(EQ, 3, ip & 0xFFFF) + movt(EQ, 3, ip >> 16) +
-             b_insn(AL, IP_CAVE + 20, IP_STORE))
+             MOV_R2_0 + STRH_R2_R11_10 + b_insn(AL, IP_CAVE + 28, IP_STORE))
     block += MOV_R0_R0 * ((TABLE_LOOP - 0x20b34 - len(block)) // 4)
     assert 0x20b34 + len(block) == TABLE_LOOP
     put(0x20b34, block)
@@ -141,7 +151,7 @@ def main():
 
 
 ORIGINAL_SHA256 = '37ce2c3a412545cb1e0cbb28c87ec6a8a7558332b99e20ab9f88a6c794e11e98'
-PATCHED_SHA256 = '97c4d8e342b9b4876c4b2ad5124e3b538a3492605aa5a3f1f36ad3ef3831a2f8'
+PATCHED_SHA256 = '2fead761d853fc92df9d34412fc2654d0bb37406781f7cae6f6ee01029694950'
 
 if __name__ == '__main__':
     main()
