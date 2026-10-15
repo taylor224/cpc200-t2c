@@ -45,15 +45,15 @@ if curl -s -m 90 "$BASE?id=logcat" -o "$LOG/log.bin" && python3 tools/logcat.py 
   grep -iE 'mtd|partition|nand|customer|boot[^a-z]|recovery|rootfs|UDISK' "$LOG/log.txt" | grep -viE 'lylink|hostapd|wpa' | head -40 | sed 's/^/   /'
   echo "   memory:"; grep -iE '^Memory:|Memory: [0-9]+K' "$LOG/log.txt" | head -2 | sed 's/^/   /'
   # Try to read the customer partition size from "0x... - 0x... : "customer"" style lines
-  python3 - "$LOG/log.txt" "$CUST" "$KERN" <<'EOF'
+  if python3 - "$LOG/log.txt" "$CUST" "$KERN" <<'EOF'
 import re, sys
 txt = open(sys.argv[1], errors='replace').read()
 cust, kern = int(sys.argv[2]), int(sys.argv[3])
 found = {}
-for m in re.finditer(r'0x([0-9a-f]+)-0x([0-9a-f]+)[[:space:]]*:[[:space:]]*"([^"]+)"', txt):
+for m in re.finditer(r'0x([0-9a-f]+)-0x([0-9a-f]+)\s*:\s*"([^"]+)"', txt):
     a, b, name = int(m.group(1), 16), int(m.group(2), 16), m.group(3)
     found[name] = b - a
-for m in re.finditer(r'\[[[:space:]]*([0-9a-f]{8,})[[:space:]]*-[[:space:]]*([0-9a-f]{8,})[[:space:]]*\][[:space:]]*:?[[:space:]]*"?([a-zA-Z0-9_]+)', txt):
+for m in re.finditer(r'\[\s*([0-9a-f]{8,})\s*-\s*([0-9a-f]{8,})\s*\]\s*:?\s*"?([a-zA-Z0-9_]+)', txt):
     a, b, name = int(m.group(1), 16), int(m.group(2), 16), m.group(3)
     if name not in found and b > a: found[name] = b - a
 if not found:
@@ -69,14 +69,15 @@ if 'boot' in found:
     ok = ok and kern <= found['boot']
 sys.exit(0 if ok else 3)
 EOF
-  PART_RC=$?
+  then PART_RC=0; else PART_RC=$?; fi
 else
   echo "   could not fetch the log"; PART_RC=2
 fi
 
 echo "== 4. current UI server"
 curl -s -m 5 -o /dev/null -w "   http://$HOST/ (OTA page) -> %{http_code}\n" "http://$HOST/" || true
-curl -sk -m 5 -o "$LOG/ui-before.html" -w "   https://101.200.208.6/ (Tesla UI) -> %{http_code} %{size_download}B\n" -H 'Host: tespush.com' 'https://101.200.208.6/' || true
+# The Tesla UI vhost answers on the AP address too; 101.200.208.6 would be routed to the public internet.
+curl -sk -m 5 -o "$LOG/ui-before.html" -w "   https://tespush.com/ via $HOST (Tesla UI) -> %{http_code} %{size_download}B\n" --resolve "tespush.com:443:$HOST" 'https://tespush.com/' || true
 
 if [ "$YES" != "--yes" ]; then
   echo "== dry run complete (partition check rc=$PART_RC). Re-run with --yes to flash."
@@ -100,9 +101,12 @@ while :; do
   [ $(( $(date +%s) - T0 )) -gt 900 ] && fail "no answer for 15 minutes; power-cycle the adapter and check $BASE?id=host manually"
   sleep 3
 done
-sleep 5
+sleep 15
 echo "== 7. after"
-curl -s -m 8 "$BASE?id=host" | sed -E 's/("uuid"|"imei"|"ICCD"|"iccid"|"wifi"|"mac")[[:space:]]*:[[:space:]]*"[^"]*"/\1:"***"/g'; echo
-curl -sk -m 8 -o "$LOG/ui-after.html" -w "   Tesla UI -> %{http_code} %{size_download}B\n" -H 'Host: tespush.com' 'https://101.200.208.6/' || true
-grep -q 'h264worker\|cp-canvas' "$LOG/ui-after.html" 2>/dev/null && echo "   new UI is being served" || echo "   WARNING: new UI not detected in https://101.200.208.6/"
+curl -s -m 20 "$BASE?id=host" | sed -E 's/("uuid"|"imei"|"ICCD"|"iccid"|"wifi"|"mac")[[:space:]]*:[[:space:]]*"[^"]*"/\1:"***"/g'; echo
+for i in 1 2 3 4 5 6; do
+  curl -sk -m 10 -o "$LOG/ui-after.html" -w "   Tesla UI via $HOST -> %{http_code} %{size_download}B\n" --resolve "tespush.com:443:$HOST" 'https://tespush.com/' && break
+  echo "   UI server not up yet, retrying"; sleep 10
+done
+grep -q 'h264worker\|cp-canvas' "$LOG/ui-after.html" 2>/dev/null && echo "   new UI is being served" || echo "   WARNING: new UI not detected"
 echo "== done. logs in $LOG"
