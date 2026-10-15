@@ -7,6 +7,43 @@ at `http://192.168.3.1/`) inside the `customer` squashfs partition are rebuilt. 
 `index.cgi` keeps handling settings and firmware upload; a small shell CGI adds reboot,
 password change, log download and diagnostics.
 
+## First installation (how to)
+
+The easiest way is the installer page: **https://taylor224.github.io/cpc200-t2c/**
+
+1. Open the page on your phone or laptop while it still has internet and press
+   *Download latest firmware* (about 8 MB, `T2C-tesla-ui-YYMMDDNN.img`).
+2. Power the T2C (in the car or from any USB charger) and join its Wi‑Fi
+   (`AutoKit_xxxx` / `TesPush_xxxx`; password printed on the adapter, default `88888888`,
+   or whatever you set in the Carlinkit app). Keep the page open.
+3. Back on the page, choose the downloaded file and press *Install on the adapter*. The
+   browser warns that `http://192.168.3.1` is not secure — that is the adapter on your
+   local network; confirm. A new tab shows the adapter's reply:
+   `{"code": 0, "msg": "upload successful"}` means it was accepted.
+4. Wait about five minutes. The adapter checks the file, reboots into recovery, writes
+   the firmware and reboots again (its Wi‑Fi disappears for ~30 s in the middle).
+
+Afterwards `http://192.168.3.1` is the new settings page and the car browser shows the new
+CarPlay page. Later updates are one tap: in the car *Settings → About → Check for updates*,
+or on the phone page *Software → Check for updates*; both read `updates/1508/version.json`
+from this repository and install the image linked there.
+
+Why the two steps: the installer is served over HTTPS and browsers refuse to send
+requests from an HTTPS page to the adapter's plain‑HTTP address (mixed content), so the
+page cannot upload with JavaScript; a normal form submission is allowed after the warning.
+Once this firmware is on the adapter, its own page is plain HTTP and updates itself.
+
+Command‑line alternative, on a computer joined to the adapter's Wi‑Fi:
+
+```
+tools/flash.sh T2C-tesla-ui-YYMMDDNN.img --yes          # pre-flight checks, upload, wait
+curl -F 'file=@T2C-tesla-ui-YYMMDDNN.img;filename=update.img' \
+     'http://192.168.3.1/cgi-bin/index.cgi?id=upload'   # bare upload
+```
+
+Only for firmware branch **1508** (`http://192.168.3.1/cgi-bin/index.cgi?id=host` shows a
+version like `2609….1508.x`). There is no A/B fallback; keep the adapter powered.
+
 ## Why
 
 Tesla software 2026.26 moved the in‑car browser to Chromium 148 and changed its pixel

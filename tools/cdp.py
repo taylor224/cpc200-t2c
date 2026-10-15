@@ -10,7 +10,7 @@ Then run steps in order, e.g.
       --shot /tmp/home.png --eval "document.title" --wait 5 --shot /tmp/stage.png --console
 
 Steps: --metrics WxHxDPR | --goto URL | --wait SEC | --shot FILE | --eval JS | --tap X,Y
-       | --click X,Y | --console | --reload
+       | --click X,Y | --drag X1,Y1,X2,Y2,MS | --console | --reload
 """
 import base64, json, os, socket, struct, sys, time, urllib.request, random
 
@@ -142,6 +142,15 @@ class CDP:
         self.call('Input.dispatchTouchEvent', type='touchStart', touchPoints=[{'x': x, 'y': y}])
         self.call('Input.dispatchTouchEvent', type='touchEnd', touchPoints=[])
 
+    def drag(self, x1, y1, x2, y2, ms, steps=30):
+        """Synthetic one-finger drag: touchStart, `steps` touchMoves spread over `ms`, touchEnd."""
+        self.call('Input.dispatchTouchEvent', type='touchStart', touchPoints=[{'x': x1, 'y': y1}])
+        for i in range(1, steps + 1):
+            t = i / steps
+            self.call('Input.dispatchTouchEvent', type='touchMove', touchPoints=[{'x': x1 + (x2 - x1) * t, 'y': y1 + (y2 - y1) * t}])
+            self.pump(ms / 1000.0 / steps)
+        self.call('Input.dispatchTouchEvent', type='touchEnd', touchPoints=[])
+
     def click(self, x, y):
         self.call('Input.dispatchMouseEvent', type='mouseMoved', x=x, y=y)
         self.call('Input.dispatchMouseEvent', type='mousePressed', x=x, y=y, button='left', clickCount=1)
@@ -174,6 +183,8 @@ def main():
             x, y = v.split(','); c.tap(float(x), float(y)); i += 2
         elif a == '--click':
             x, y = v.split(','); c.click(float(x), float(y)); i += 2
+        elif a == '--drag':
+            x1, y1, x2, y2, ms = v.split(','); c.drag(float(x1), float(y1), float(x2), float(y2), float(ms)); i += 2
         elif a == '--console':
             print('console (%d):' % len(c.console))
             for line in c.console:

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>CPC200-T2C firmware installer</title>
+<link rel="stylesheet" href="install.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="brand-name">CPC200‑T2C</span><span class="brand-sub" data-i18n="sub"></span></div>
+  <select id="lang" class="lang" aria-label="Language">
+    <option value="auto">Auto</option>
+    <option value="en">English</option>
+    <option value="ko">한국어</option>
+    <option value="ja">日本語</option>
+    <option value="zh-CN">简体中文</option>
+    <option value="zh-TW">繁體中文</option>
+  </select>
+</header>
+<main>
+  <section class="card">
+    <h2 data-i18n="latest"></h2>
+    <div class="row"><span data-i18n="version"></span><b id="ver">…</b></div>
+    <div class="row"><span data-i18n="file"></span><b id="file">…</b></div>
+    <p class="hint" id="msg"></p>
+    <p class="hint"><a id="release-link" href="https://github.com/taylor224/cpc200-t2c/releases" target="_blank" rel="noopener" data-i18n="notes"></a></p>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">1</span><span data-i18n="s1.title"></span></h2>
+    <p data-i18n="s1.text"></p>
+    <div class="actions">
+      <button class="btn btn-primary" id="btn-download" data-i18n="s1.button"></button>
+    </div>
+    <div id="dl-prog" class="prog hidden"><div class="bar"><div id="dl-bar"></div></div><div id="dl-msg"></div></div>
+    <p class="hint"><a id="direct-link" href="#" download data-i18n="s1.direct"></a></p>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">2</span><span data-i18n="s2.title"></span></h2>
+    <p data-i18n="s2.text"></p>
+    <p class="hint" data-i18n="s2.hint"></p>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">3</span><span data-i18n="s3.title"></span></h2>
+    <p data-i18n="s3.text"></p>
+    <form id="upload-form" method="POST" enctype="multipart/form-data" action="http://192.168.3.1/cgi-bin/index.cgi?id=upload" target="t2c-reply">
+      <label class="field"><span data-i18n="s3.pick"></span><input type="file" name="file" id="in-file" accept=".img,application/octet-stream" required></label>
+      <div class="actions"><button class="btn btn-primary" type="submit" id="btn-install" data-i18n="s3.button"></button></div>
+    </form>
+    <p class="hint" data-i18n="s3.warn"></p>
+    <p class="hint" data-i18n="s3.reply"></p>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">4</span><span data-i18n="s4.title"></span></h2>
+    <p data-i18n="s4.text"></p>
+    <p class="hint" data-i18n="s4.after"></p>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="alt.title"></h2>
+    <p data-i18n="alt.text"></p>
+    <pre id="curl">curl -F 'file=@T2C-tesla-ui.img;filename=update.img' 'http://192.168.3.1/cgi-bin/index.cgi?id=upload'</pre>
+    <p class="hint" data-i18n="alt.hint"></p>
+  </section>
+  <footer class="foot"><a href="https://github.com/taylor224/cpc200-t2c" target="_blank" rel="noopener">github.com/taylor224/cpc200-t2c</a></footer>
+</main>
+<script src="install.js"></script>
+</body>
+</html>

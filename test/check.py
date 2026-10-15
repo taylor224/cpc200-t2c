@@ -90,5 +90,25 @@ for d, _, fs in os.walk(WWW):
         total += os.path.getsize(os.path.join(d, f))
 check(total < 2200 * 1024, 'src/www total %d KB < 2200 KB (includes the 1.4 MB H.264 decoder)' % (total // 1024))
 
+# 7. installer page (docs/, GitHub Pages): JS syntax, i18n parity, ids
+DOCS = os.path.join(ROOT, 'docs')
+r = subprocess.run(['node', '--check', os.path.join(DOCS, 'install.js')], capture_output=True, text=True)
+check(r.returncode == 0, 'node --check docs/install.js' + ('' if r.returncode == 0 else '\n' + r.stderr))
+inst_js = open(os.path.join(DOCS, 'install.js'), encoding='utf-8').read()
+inst_tables = {}
+for m in re.finditer(r"T(?:\.(\w+)|\['([\w-]+)'\])\s*=\s*\{(.*?)\n  \};", inst_js, re.S):
+    inst_tables[m.group(1) or m.group(2)] = set(re.findall(r"'([a-z0-9]+(?:\.[a-z0-9_]+)?)':", m.group(3)))
+check(set(inst_tables) == {'en', 'ko', 'ja', 'zh-CN', 'zh-TW'}, 'docs: five language tables')
+inst_en = inst_tables.get('en', set())
+for name, keys in inst_tables.items():
+    diff = sorted(inst_en ^ keys)
+    check(not diff, 'docs keys of %s match en' % name + ('' if not diff else ': ' + ', '.join(diff)))
+inst_html = open(os.path.join(DOCS, 'index.html'), encoding='utf-8').read()
+missing_inst = sorted(k for k in set(re.findall(r'data-i18n="([^"]+)"', inst_html)) if k not in inst_en)
+check(not missing_inst, 'docs: all data-i18n keys exist' + ('' if not missing_inst else ': ' + ', '.join(missing_inst)))
+inst_ids = set(re.findall(r"\$\('([a-zA-Z0-9_-]+)'\)", inst_js)); inst_dom = set(re.findall(r'id="([^"]+)"', inst_html))
+missing_inst_ids = sorted(i for i in inst_ids if i not in inst_dom)
+check(not missing_inst_ids, 'docs: all $(id) targets exist' + ('' if not missing_inst_ids else ': ' + ', '.join(missing_inst_ids)))
+
 print('\n%d failure(s)' % fails)
 sys.exit(1 if fails else 0)
