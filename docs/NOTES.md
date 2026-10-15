@@ -188,3 +188,17 @@ raw URL), release assets stay for manual download. `tools/release.sh` does the w
 cycle. The Mac's internet on the adapter's Wi‑Fi goes through the iPhone's Bluetooth PAN
 (~40–70 KB/s, stalls); GitHub's asset upload endpoint times out on it unless the upload
 is rate‑limited (`curl --limit-rate 45k` worked), git push over SSH was fine.
+
+## Internet path (BT_Network hardware)
+
+`lylinkapp` brings up a Bluetooth PAN client to the phone (`udhcpc -R -n -b -i bt-pan`),
+enables forwarding and NATs the hotspot behind it (`iptables -t nat -A POSTROUTING -o
+bt-pan -j MASQUERADE`). `app/udhcpd.conf` hands the Tesla (and the iPhone) `router
+192.168.3.1` and DNS `8.8.8.8 114.114.114.114 192.168.3.1`, so once the car is on the
+adapter's Wi‑Fi all of its traffic goes through the phone's Bluetooth PAN. Measured from a
+Mac on the hotspot while an 8 MB download was running: 40–70 KB/s, RTT 350–2300 ms, 25 %
+loss, DNS 300 ms; the adapter's own DNS (192.168.3.1) did not answer queries. The PAN
+stack lives in the closed `gocsdk`/`lylinkapp` binaries (BT controller UART rate etc.);
+nothing on the web side changes its speed. Levers that do exist: the `btnet` setting (type 7
+key 8: 1 off / 2 on) and `app/udhcpd.conf` (router / DNS / static‑route options given to
+the car) — both untested against Tesla's connectivity checks.
