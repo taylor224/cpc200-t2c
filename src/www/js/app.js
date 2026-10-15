@@ -48,7 +48,9 @@
     carUi: false,          // iPhone asked for the car's own UI (Carlinkit app tapped in CarPlay)
     elsewhere: false,      // another page connected to the adapter and took over
     updating: false, updateUrl: null,
-    hasCell: true
+    hasCell: true,
+    sessWanted: null,      // session size this page asked for (null = adapter preset)
+    sessSig: '', sessRestartAt: 0, sessNew: false, sessMismatch: 0
   };
 
   var link = new LinkClient();
@@ -93,7 +95,17 @@
   function confirmReload(text) {
     dialog({ text: text, buttons: [{ label: t('dlg.cancel') }, { label: t('dlg.reload'), primary: true, onClick: reload }] });
   }
-  function reload() { location.reload(); }
+  /* Several paths reload the page to re-apply a setting. Should one of them not converge
+   * (a setting the adapter does not take, storage that does not persist), stop instead of
+   * reloading forever: the history entry survives reloads and remembers the recent ones. */
+  function reload() {
+    var now = Date.now();
+    var recent = ((history.state && history.state.t2cReloads) || []).filter(function (ts) { return now - ts < 60000; });
+    if (recent.length >= 4) { console.warn('reload loop stopped'); toast(t('home.reload_loop'), 8000); return; }
+    recent.push(now);
+    try { history.replaceState({ t2cReloads: recent }, ''); } catch (e) { /* ignore */ }
+    location.reload();
+  }
 
   function requireLink() {
     if (link.open) return true;
@@ -178,14 +190,15 @@
 
   /* ------------------------------------------------------- transport */
 
-  var H264_SLOW_TTL = 7 * 86400 * 1000;   // remember a too-slow verdict for a week
+  var H264_SLOW_TTL = 7 * 86400 * 1000;   // a decoder that cannot keep up: stay on MJPEG for a week
+  var H264_ERROR_TTL = 3600 * 1000;       // a crash or a lost GPU context: try again in an hour
 
   function wantVideo() {
-    if (!VideoPresenter.canH264()) return false;
+    if (!VideoPresenter.canH264() || (presenter && presenter.broken)) return false;
     if (prefs.transport === 'video') return true;
     if (prefs.transport === 'picture') return false;
-    var slow = store.get('h264slow', 0);
-    return !(slow && Date.now() - slow < H264_SLOW_TTL);
+    var until = store.get('h264slow', 0);   // expiry; older builds stored the verdict time, long past
+    return !(until && Date.now() < until);
   }
 
   /** Put the adapter in the transport mode we can render; restart the session when needed. */
@@ -195,15 +208,14 @@
     if (state.vid !== want) {
       link.setKey(KEY.MODE, want ? 1 : 0);
       state.vid = want;
-      // The adapter picks the pipeline when the iPhone's video starts, so an active
-      // session has to be restarted: reloading in Auto picture-size mode does that.
-      if (state.link >= 1 || userAction) { session.set('modeSig', want ? '1' : '0'); setTimeout(reload, 400); }
+      // The adapter picks the pipeline when the iPhone's video starts: an active session has to be restarted.
+      if (state.link >= 1 || userAction) restartSession();
     }
   }
 
   function h264Failed(reason) {
     console.warn('h264 fallback:', reason);
-    store.set('h264slow', Date.now());
+    store.set('h264slow', Date.now() + (reason === 'slow' ? H264_SLOW_TTL : H264_ERROR_TTL));
     toast(t(reason === 'slow' ? 'video.slow' : 'video.unsupported'), 5000);
     if (prefs.transport === 'video') { prefs.transport = 'auto'; store.set('transport', 'auto'); segSet('seg-mode', 'auto'); }
     applyTransport(true);
@@ -223,6 +235,7 @@
     // 2 -> 1 while the phone stays connected means the user opened the Carlinkit app
     // inside CarPlay: the adapter stops the video and expects this page to show its menu.
     state.carUi = newLink === 1 && prev > 1;
+    if (newLink > 1 && prev <= 1) state.sessNew = true;
     try {
       if (newLink > 1) {
         link.cmd(CMD.VIDEO);
@@ -246,7 +259,16 @@
     $('dev-connecting').classList.toggle('hidden', !state.linking);
   }
 
+  var idleTimer = 0;
+  function armIdle() {
+    clearTimeout(idleTimer); idleTimer = 0;
+    document.body.classList.remove('idle');
+    // The waiting screen animates; parked for hours with no phone that is repaint work for nothing.
+    if (state.link < 1 && !state.linking && !state.elsewhere) idleTimer = setTimeout(function () { document.body.classList.add('idle'); }, 120000);
+  }
+
   function renderHomeStatus() {
+    armIdle();
     var txt = $('home-status-text'), dot = $('home-dot'), spin = $('home-spinner');
     var open = $('btn-open-carplay'), steps = $('home-steps');
     spin.classList.add('hidden'); dot.classList.remove('hidden', 'on', 'ok');
@@ -297,30 +319,74 @@
     return ss ? [ss.w, ss.h, ss.mmw, ss.mmh].join('x') : 'device' + state.pixel;
   }
 
+  function setPixel(p) {
+    link.setKey(KEY.PIXEL, p); state.pixel = p; segSet('seg-pixel', p);
+    state.sessRestartAt = Date.now(); state.sessNew = false;
+  }
+
+  /** Restart the CarPlay session. lylinkui does that on any change of the pixel setting while a
+   *  type-11 override keeps the size, so toggling between two presets is a plain restart. In the
+   *  Auto flows (adapter presets, or firmware that ignores the override outside Auto) a reload
+   *  does it through the hello instead. */
+  function restartSession() {
+    if (Date.now() - state.sessRestartAt < 1000) return;      // one restart per settings pass
+    if (prefs.res === 'device' || store.get('sessAuto', false)) {
+      state.sessRestartAt = Date.now();
+      setTimeout(reload, 400);
+      return;
+    }
+    setPixel(state.pixel === 0 ? 1 : 0);
+  }
+
   /** Push the session override to the adapter and make sure it takes effect. */
   function applySession(userAction) {
     var ss = computeSession();
     var sig = sessionSignature(ss);
+    state.sessWanted = ss;
     $('session-info').textContent = ss ? (ss.w + ' × ' + ss.h + ' · ' + ss.mmw + ' × ' + ss.mmh + ' mm') : t('disp.res_device');
     $('row-pixel').classList.toggle('hidden', !!ss);
     $('row-uiscale').classList.toggle('hidden', !ss);
     if (!link.open) return;
+    var changed = sig !== state.sessSig;
+    state.sessSig = sig;
     if (ss) {
       link.setSessionOverride(ss.w, ss.h, ss.mmw, ss.mmh);
-      if (state.pixel !== 3) {
-        // Switching the adapter to "Auto" restarts the CarPlay session with the override.
-        link.setKey(KEY.PIXEL, 3); state.pixel = 3; segSet('seg-pixel', 3);
-        session.set('sess', sig);
-      } else if (session.get('sess') !== sig) {
-        session.set('sess', sig);
-        // The adapter restarts the session when this page (re)connects in Auto mode,
-        // but the first connection of this load happened before the override arrived.
-        if (state.link >= 1 || userAction) setTimeout(reload, 400);
+      if (store.get('sessAuto', false)) {
+        // Auto flow: every hello restarts the session (and the iPhone's Bluetooth PAN with it);
+        // a changed override needs a reload to get one.
+        if (state.pixel !== 3) { setPixel(3); session.set('sess', sig); }
+        else if (session.get('sess') !== sig) { session.set('sess', sig); if (state.link >= 1 || userAction) restartSession(); }
+      } else if (state.pixel === 3) {
+        // Leave Auto. In Auto every hello — reconnect, reload, a second page — restarts the
+        // CarPlay session. With a fixed preset it restarts only when asked, and the override
+        // keeps its size; the change itself restarts the session once, override in place.
+        setPixel(0);
+      } else if (userAction && changed) {
+        restartSession();
       }
+      // Otherwise nothing: verifySession() restarts only if the picture that arrives has
+      // another size than requested (the override is lost when the adapter reboots).
     } else {
       link.setSessionOverride(0, 0, 0, 0);
       session.set('sess', sig);
-      if (userAction && state.link >= 1) setTimeout(reload, 400);
+      if (state.pixel === 0) setPixel(3);                        // preset 0 has no button; back to Auto
+      else if (userAction && state.link >= 1) setTimeout(reload, 400);
+    }
+  }
+
+  /** Called with the size of the picture that actually arrives. */
+  function verifySession(w, h) {
+    var ss = state.sessWanted;
+    if (!ss || !link.open || store.get('sessAuto', false)) return;
+    if (w === ss.w && h === ss.h) { state.sessMismatch = 0; return; }
+    // Frames of the previous session can still arrive right after a restart request.
+    if (!state.sessNew || Date.now() - state.sessRestartAt < 5000) return;
+    state.sessMismatch++;
+    console.warn('session is ' + w + 'x' + h + ', wanted ' + ss.w + 'x' + ss.h + ' (' + state.sessMismatch + ')');
+    if (state.sessMismatch === 1) { link.setSessionOverride(ss.w, ss.h, ss.mmw, ss.mmh); restartSession(); }
+    else if (state.sessMismatch === 2) {
+      // This firmware does not honour the override with a fixed preset: back to the Auto flow.
+      store.set('sessAuto', true); session.set('sess', sessionSignature(ss)); setPixel(3);
     }
   }
 
@@ -768,8 +834,8 @@
     qsa('.nav-item').forEach(function (a) {
       a.addEventListener('click', function (e) { e.preventDefault(); showPage(a.getAttribute('data-page')); });
     });
-    $('btn-reload').onclick = reload;
-    $('btn-use-here').onclick = reload;
+    $('btn-reload').onclick = function () { location.reload(); };
+    $('btn-use-here').onclick = function () { location.reload(); };
     $('btn-stage-settings').onclick = function () {
       // Leave the picture, keep the CarPlay session; "Open CarPlay" brings it back.
       presenter.stop(); showStage(false); showPage('home');
@@ -799,12 +865,12 @@
       state.isNight = 2; scheduleNightTick();
     });
     segBind('seg-theme', function (v) { prefs.theme = v; store.set('theme', v); applyTheme(); });
-    segBind('seg-res', function (v) { prefs.res = v; store.set('res', v); applySession(true); });
+    segBind('seg-res', function (v) { prefs.res = v; store.set('res', v); store.set('sessAuto', false); applySession(true); });
     segBind('seg-pixel', function (v) {
       if (!requireLink()) return false;
       state.pixel = +v; link.setKey(KEY.PIXEL, +v); session.set('sess', sessionSignature(null));
     });
-    segBind('seg-uiscale', function (v) { prefs.uiScale = v; store.set('uiScale', v); applySession(true); });
+    segBind('seg-uiscale', function (v) { prefs.uiScale = v; store.set('uiScale', v); store.set('sessAuto', false); applySession(true); });
     segBind('seg-fps', function (v) { if (!requireLink()) return false; link.setKey(KEY.FPS, +v); });
     segBind('seg-fit', function (v) { prefs.fit = v; store.set('fit', v); presenter.setFit(v); });
     segBind('seg-mode', function (v) {
@@ -849,7 +915,12 @@
       clearTimeout(window.__rsz);
       window.__rsz = setTimeout(function () {
         var h = link.hello || {};
-        if (Math.abs(window.innerWidth - h.w) >= CONFIG.RESIZE_RELOAD_PX || Math.abs(window.innerHeight - h.h) >= CONFIG.RESIZE_RELOAD_PX) reload();
+        if (Math.abs(window.innerWidth - h.w) < CONFIG.RESIZE_RELOAD_PX && Math.abs(window.innerHeight - h.h) < CONFIG.RESIZE_RELOAD_PX) return;
+        // The layout follows the viewport on its own; only the CarPlay session size depends on
+        // it. The Auto flows carry that size in the hello, so they still reload.
+        if (prefs.res === 'device' || store.get('sessAuto', false)) { reload(); return; }
+        h.w = window.innerWidth; h.h = window.innerHeight;
+        applySession(true);
       }, 1000);
     });
     document.addEventListener('visibilitychange', function () {
@@ -867,15 +938,22 @@
     segSet('seg-mode', prefs.transport);
     $('stats').checked = !!prefs.stats;
 
+    // The iPhone sends an IDR only when asked; at most one request a second.
     var keyTimer = 0;
+    function requestKeyframe() {
+      if (keyTimer) return;
+      keyTimer = setTimeout(function () { keyTimer = 0; }, 1000);
+      if (state.link > 1) link.cmd(CMD.KEYFRAME);
+    }
     presenter = new VideoPresenter({
       canvas: $('cp-canvas'), canvasWorker: $('cp-canvas-worker'), img: $('cp-img'), statsEl: $('stage-stats'), fit: prefs.fit,
       onMessage: function (kind, a, b) {
-        if (kind === 'size') $('session-info').textContent = a + ' × ' + b + ($('session-info').getAttribute('data-mm') || '');
+        if (kind === 'size') verifySession(a, b);
         else if (kind === 'needkey') {
-          if (!keyTimer) keyTimer = setTimeout(function () { keyTimer = 0; link.cmd(CMD.KEYFRAME); }, 1000);
+          requestKeyframe();
           $('stage-msg').textContent = t('video.keyframe'); $('stage-msg').classList.remove('hidden');
         }
+        else if (kind === 'refresh') requestKeyframe();
         else if (kind === 'key') $('stage-msg').classList.add('hidden');
         else if (kind === 'slow') h264Failed('slow');
         else if (kind === 'h264error') h264Failed(a);
@@ -895,6 +973,7 @@
       .on('fw', onFwStatus)
       .on('reload', reload)
       .on('video', function (bytes) { if (state.link > 1) presenter.feedH264(bytes); })
+      .on('videodrop', function () { presenter.noteDrop(); })
       .on('qr', function (text) {
         var qr = $('qr'); qr.innerHTML = '';
         try { new QRCode(qr, { text: text, width: 256, height: 256, correctLevel: QRCode.CorrectLevel.M }); } catch (e) { qr.textContent = text; }

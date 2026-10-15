@@ -7,7 +7,7 @@ from a directory of JPEG frames, and can push an Annex-B H.264 stream in video m
 
 Usage:
   devserver.py [--www src/www] [--frames DIR] [--h264 FILE] [--port 8765]
-               [--link-after SEC] [--mode picture|video] [--lan N] [--no-cell]
+               [--link-after SEC] [--mode picture|video] [--lan N] [--no-cell] [--no-keyframes]
 
 Standard library only. Not part of the firmware.
 """
@@ -195,18 +195,26 @@ def h264_loop():
         frames.append(acc)
     log('h264 mock: %d access units' % len(frames))
     k = 0
+    n = 0
     while True:
         if STATE['link'] > 1 and STATE['cfg']['vid']:
-            f = frames[k % len(frames)]
-            k += 1
-            if len(f) < 60000:
-                broadcast(msg(100, struct.pack('<I', len(f)) + f))
-            else:
-                chunks = [f[i:i + 32768] for i in range(0, len(f), 32768)]
-                broadcast(msg(101, struct.pack('<I', len(f)) + chunks[0]))
-                for ch in chunks[1:-1]:
-                    broadcast(msg(102, ch))
-                broadcast(msg(103, chunks[-1]))
+            if STATE.pop('keyreq', False):
+                k = 0          # key frame requested (cmd 8): restart from the IDR
+            n += 1
+            burst = ARGS.burst if (ARGS.burst and n % 150 == 0) else 1
+            for _ in range(burst):
+                f = frames[k % len(frames)]
+                k += 1
+                if len(f) < 60000:
+                    broadcast(msg(100, struct.pack('<I', len(f)) + f))
+                else:
+                    chunks = [f[i:i + 32768] for i in range(0, len(f), 32768)]
+                    broadcast(msg(101, struct.pack('<I', len(f)) + chunks[0]))
+                    for ch in chunks[1:-1]:
+                        broadcast(msg(102, ch))
+                    broadcast(msg(103, chunks[-1]))
+            if burst > 1:
+                log('burst of %d access units' % burst)
             time.sleep(1 / 30)
         else:
             time.sleep(0.2)
@@ -385,7 +393,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif cmd == 9:
                 c.send(msg(300, b'WIFI:T:WPA;S:TesPush_T2C_7F3A;P:88888888;;'))
             elif cmd == 8:
-                pass
+                if not ARGS.no_keyframes:
+                    STATE['keyreq'] = True
             elif cmd == 7:
                 log('FACTORY RESET requested')
             elif cmd == 1:
@@ -399,6 +408,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             name = names.get(k, 'key%d' % k)
             log('setkey', name, v)
             cfg = STATE['cfg']
+            if name in ('pixel', 'driver', 'fps') and cfg.get(name) != v and STATE['link'] >= 1:
+                # lylinkui restarts the CarPlay session on any change of these.
+                def restart_cfg():
+                    log('session restart (%s %s -> %s)' % (name, cfg.get(name), v))
+                    set_link(0)
+                    time.sleep(1.5)
+                    set_link(1)
+                    time.sleep(0.5)
+                    set_link(2)
+                threading.Thread(target=restart_cfg, daemon=True).start()
             if name == 'vid':
                 cfg['vid'] = bool(v)
             elif name == 'btnet':
@@ -455,6 +474,8 @@ def main():
     p.add_argument('--lan', type=int, default=3)
     p.add_argument('--no-cell', action='store_true')
     p.add_argument('--verbose', action='store_true')
+    p.add_argument('--no-keyframes', action='store_true', help='ignore key frame requests (cmd 8), like a slow iPhone')
+    p.add_argument('--burst', type=int, default=0, help='every 5 s send N access units at once (decoder falls behind)')
     ARGS = p.parse_args()
     ARGS.www = os.path.abspath(ARGS.www)
     STATE['cfg']['vid'] = ARGS.mode == 'video'

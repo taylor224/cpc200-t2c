@@ -214,6 +214,7 @@ a { color: inherit; text-decoration: none; }
 .art-waves path { opacity: 0.25; }
 .art-waves .w1 { animation: wave 2.4s ease-in-out infinite; }
 .art-waves .w2 { animation: wave 2.4s ease-in-out 0.6s infinite; }
+.idle .art-waves .w1, .idle .art-waves .w2 { animation-play-state: paused; }
 @keyframes wave { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.9; } }
 .hero-title { font-family: "Universal Sans Display", "Universal Sans Text", inherit; font-size: 2.5rem; font-weight: 500; line-height: 1.2; }
 .hero-sub { color: var(--text-3); margin-top: 0.2rem; }

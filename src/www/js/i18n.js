@@ -27,6 +27,7 @@
     'home.waiting': 'Waiting for iPhone', 'home.connected': 'iPhone connected',
     'home.starting': 'Starting CarPlay…', 'home.open_carplay': 'Open CarPlay', 'home.car_ui': 'iPhone connected · settings',
     'home.elsewhere': 'CarPlay is open on another screen', 'home.use_here': 'Use this screen',
+    'home.reload_loop': 'The page kept reloading without effect and stopped. Check the adapter, then reload by hand.',
     'home.elsewhere_hint': 'The adapter works with one screen at a time and another browser has just connected. Switch CarPlay back to this screen?',
     'home.open_settings': 'Settings', 'home.last_device': 'Last connected',
 
@@ -109,6 +110,7 @@
     'home.waiting': 'iPhone을 기다리는 중', 'home.connected': 'iPhone 연결됨',
     'home.starting': 'CarPlay 시작 중…', 'home.open_carplay': 'CarPlay 열기', 'home.car_ui': 'iPhone 연결됨 · 설정',
     'home.elsewhere': '다른 화면에서 CarPlay 사용 중', 'home.use_here': '이 화면에서 사용',
+    'home.reload_loop': '페이지를 반복해서 새로 고쳐도 적용되지 않아 중단했습니다. 어댑터를 확인한 뒤 직접 새로 고침하세요.',
     'home.elsewhere_hint': '어댑터는 한 번에 한 화면만 연결할 수 있는데, 다른 브라우저가 방금 연결했습니다. 이 화면으로 다시 가져올까요?',
     'home.open_settings': '설정', 'home.last_device': '최근 연결',
 
@@ -191,6 +193,7 @@
     'home.waiting': 'iPhone を待っています', 'home.connected': 'iPhone 接続済み',
     'home.starting': 'CarPlay を開始中…', 'home.open_carplay': 'CarPlay を開く', 'home.car_ui': 'iPhone 接続済み · 設定',
     'home.elsewhere': '別の画面で CarPlay を使用中', 'home.use_here': 'この画面で使う',
+    'home.reload_loop': 'ページを再読み込みしても反映されないため停止しました。アダプターを確認してから手動で再読み込みしてください。',
     'home.elsewhere_hint': 'アダプターは同時に 1 つの画面にしか接続できず、別のブラウザーが接続しました。この画面に戻しますか？',
     'home.open_settings': '設定', 'home.last_device': '最後に接続',
 
@@ -273,6 +276,7 @@
     'home.waiting': '等待 iPhone', 'home.connected': 'iPhone 已连接',
     'home.starting': '正在启动 CarPlay…', 'home.open_carplay': '打开 CarPlay', 'home.car_ui': 'iPhone 已连接 · 设置',
     'home.elsewhere': 'CarPlay 正在其他屏幕上使用', 'home.use_here': '在此屏幕使用',
+    'home.reload_loop': '页面反复重新加载仍未生效，已停止。请检查适配器后手动刷新。',
     'home.elsewhere_hint': '适配器一次只能连接一个屏幕，另一个浏览器刚刚已连接。要切换回此屏幕吗？',
     'home.open_settings': '设置', 'home.last_device': '上次连接',
 
@@ -355,6 +359,7 @@
     'home.waiting': '等待 iPhone', 'home.connected': 'iPhone 已連線',
     'home.starting': '正在啟動 CarPlay…', 'home.open_carplay': '開啟 CarPlay', 'home.car_ui': 'iPhone 已連線 · 設定',
     'home.elsewhere': 'CarPlay 正在其他螢幕上使用', 'home.use_here': '在此螢幕使用',
+    'home.reload_loop': '頁面反覆重新載入仍未生效，已停止。請檢查轉接器後手動重新整理。',
     'home.elsewhere_hint': '轉接器一次只能連線一個螢幕，另一個瀏覽器剛剛已連線。要切換回此螢幕嗎？',
     'home.open_settings': '設定', 'home.last_device': '上次連線',
 

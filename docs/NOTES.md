@@ -72,7 +72,20 @@ When a type‑11 override is present it replaces all of the above. The iPhone re
 the requested pixel size and derives its UI scale from pixels‑per‑millimetre, which is
 why the UI exposes *CarPlay UI size* (≈6.4 / 5.2 / 4.2 px/mm). The session is
 (re)started on every hello when `pixel == 3`, on any pixel/driver/fps change, and on
-phone connect; the web UI relies on this to apply the override.
+phone connect.
+
+Until 26101504 the page kept the adapter in Auto and reloaded itself to get a hello whenever
+the override changed — which also meant that every reconnect, reload or second page restarted
+the CarPlay session (and the iPhone's Bluetooth PAN with it, see below). Now the page sends
+the override and then moves the pixel setting off Auto (3 → 0); from then on a restart is
+only requested on purpose, by toggling the preset 0 ↔ 1 (`restartSession()` in `app.js`),
+and a hello restarts nothing. The override itself lives in lylinkui's RAM, so after an adapter
+reboot the first session can come up at the preset size; the page compares the size of the
+picture that arrives with what it asked for (`verifySession()`), restarts once if they differ,
+and if they still differ falls back to the old Auto flow (`localStorage t2c.sessAuto`, cleared
+when the user changes the size settings). *Not yet checked on the device:* that the override
+is honoured with `pixel ∈ {0, 1}` — the disassembly says the override replaces every preset,
+the fallback covers the case that it does not.
 
 In picture mode the H.264 from the iPhone is decoded and re‑encoded as JPEG by the
 Allwinner V831 hardware at the session size, then pushed over `/video.jpg`. Limits used
@@ -91,9 +104,17 @@ canvas, and the Tesla browser has no WebCodecs. The iPhone's stream is High prof
 (`avc1.64001f`, CABAC, no B‑frames). Widely used JS decoders are baseline‑only
 (`tinyh264`, Broadway), so FFmpeg's h264 decoder is compiled to WebAssembly instead
 (`tools/build-h264dec.sh`: `--disable-everything --enable-decoder=h264`, `-O3 -msimd128`,
-single‑threaded, ~1.4 MB). `js/h264worker.js` feeds complete access units
-(`AV_CODEC_FLAG_LOW_DELAY`, newest‑wins queue) and uploads the YUV planes to three
-textures; BT.601/709 and range come from the SPS VUI. Threads are impossible because
+single‑threaded, ~1.4 MB). `js/h264worker.js` decodes complete access units
+(`AV_CODEC_FLAG_LOW_DELAY`) and uploads the YUV planes to three textures; BT.601/709 and
+range come from the SPS VUI. Flow control is on the main thread (`video.js`): one access
+unit is in flight, the newest arrival replaces a waiting one, and a frame dropped that way
+breaks the reference chain, so the worker asks for a fresh IDR (`refresh` → `CMD.KEYFRAME`;
+the iPhone only sends one on request — a measured single dropped P‑frame leaves the picture
+at 21–28 dB PSNR for hundreds of frames otherwise). A worker cannot do this itself: its
+message queue is only visible one message at a time, so until 26101504 nothing was ever
+dropped and a slow decoder just accumulated latency. The WebGL context is allowed to be lost
+and restored (`webglcontextlost` + `preventDefault`); if it does not come back in 10 s the
+app falls back to MJPEG for an hour. Threads are impossible because
 the adapter's server cannot send COOP/COEP. libwebsockets 3.2 refuses unknown
 extensions, so the module ships as `h264dec.wasm.txt` and is loaded via `wasmBinary`.
 
@@ -302,3 +323,32 @@ and offers "Use this screen" instead of reconnecting. If HTTP is dead too, it dr
 socket (no closing-handshake wait) and reconnects as before. `tools/devserver.py` now mimics
 the single current client and the Auto-mode restart on hello, so the loop reproduces locally
 with two headless Chromes (old UI: 8 restarts in 30 s; new: 1).
+
+## Long sessions (audit 2026-10-15)
+
+Soak on the bench (headless Chrome 155, 773×601 @ DPR 1.53, devserver H.264 mock 768×608 at
+30 fps, 12 min): JS heap flat at 1.0–1.8 MB, DOM nodes ~920 and 81 listeners constant,
+renderer RSS 181 → 182 MB, decode ~2.2 ms, 0 dropped. The steady state does not leak; what
+could go wrong over a long drive were event paths, fixed after 26101504:
+
+- The "decoder too slow" verdict (`video.js`, >40 % of frames undecoded for 5 s → MJPEG,
+  remembered for a week) counted frames skipped while waiting for a key frame. With a mock
+  that ignored key‑frame requests the page fell back within 5 s of connecting. Frames skipped
+  for a missing IDR are now reported separately (`wait`) and do not count; the memory of a
+  verdict is an expiry time, a week for *slow*, an hour for crashes and lost GPU contexts.
+- No newest‑wins drop ever happened in the worker (see "H.264 in the browser"), and a drop
+  never asked for an IDR. Both fixed; `devserver.py --burst 12` sends 12 access units at once
+  every 5 s to exercise it (10 dropped, one `cmd 8` per burst), `--no-keyframes` makes the mock
+  ignore key‑frame requests (the page must wait, not fall back).
+- WebGL context loss in the worker was unhandled: the picture would freeze while the stats
+  kept reporting decoded frames, with no way out short of a reload.
+- Reloads are guarded: more than four within a minute (a setting the adapter does not take,
+  storage that does not persist) stop with a message instead of looping. User‑triggered reloads
+  bypass the guard. Resizes re‑apply the session size instead of reloading.
+- Pong tolerance before probing the link went from 3 s to 5 s (short status stalls on the
+  adapter are not a takeover).
+- The waiting screen's animation pauses after two minutes without a phone.
+- Still open: `superseded` can in principle be a false positive if lylinkui's status thread
+  stalls while HTTP keeps answering (recovery is the "Use this screen" button); whether the
+  Tesla keyboard changes `innerHeight` (which would re‑apply the session size while typing a
+  name) has not been checked in the car.

@@ -13,6 +13,7 @@
  *     type 13 : key     [key, mod]
  *     type 4/5/6/9 : string payload (bt connect / disconnect / forget / wifi psk)
  *   server -> client : Uint32 header [length, type] followed by payload
+ *     (an access unit that cannot be reassembled is reported as 'videodrop' so the app can ask for a key frame)
  *     0   status JSON   1 init JSON   2 bt list changed   3 link JSON {link, phone}
  *     4   firmware status {val, pong}   5 reload   100 h264 access unit   101/102/103 fragments
  *     300 QR text
@@ -22,6 +23,9 @@
 
   var CMD = { VIDEO: 0, AUTO_ON: 1, AUTO_OFF: 2, BTLIST: 5, DISCONNECT: 6, FACTORY_RESET: 7, KEYFRAME: 8, QR: 9 };
   var KEY = { NIGHT: 1, PIXEL: 2, DRIVER: 3, CHANNEL: 6, LANG: 7, BTNET: 8, FPS: 9, ONLINE: 10, MODE: 11 };
+
+  // Seconds of missing pongs before the link is probed (status JSON carries the pong once a second).
+  var PONG_LATE = 5;
 
   var encoder = global.TextEncoder ? new TextEncoder() : null;
   function utf8(str) {
@@ -120,7 +124,7 @@
 
   LinkClient.prototype.tick = function () {
     if (!this.open) return;
-    if (this.pong + 3 < this.ping && !this.stale) { this.stale = true; this.checkStale(); }
+    if (this.pong + PONG_LATE < this.ping && !this.stale) { this.stale = true; this.checkStale(); }
     this.raw(new Uint32Array([0x000C0004, this.ping]));
     this.ping++;
   };
@@ -134,7 +138,7 @@
   LinkClient.prototype.checkStale = function () {
     var self = this, ws = this.ws;
     function current() { return ws === self.ws && self.open; }
-    function behind() { return self.pong + 3 < self.ping; }
+    function behind() { return self.pong + PONG_LATE < self.ping; }
     var ctl = global.AbortController ? new AbortController() : null;
     var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 2500);
     fetch('/js/boot.js', { cache: 'no-store', signal: ctl ? ctl.signal : undefined })
@@ -247,14 +251,15 @@
 
   LinkClient.prototype.onMessage = function (data) {
     if (!(data instanceof ArrayBuffer) || data.byteLength < 8) return;
-    var hdr = new Uint32Array(data.slice(0, 8));
+    // Views, not copies: at 8 Mbit/s of video a slice per frame is megabytes of garbage a second.
+    var hdr = new Uint32Array(data, 0, 2);
     var len = hdr[0], type = hdr[1];
     if (len !== data.byteLength - 8) {
       console.warn('bad frame', len, data.byteLength);
       try { this.ws.close(); } catch (e) { /* ignore */ }
       return;
     }
-    var payload = data.slice(8);
+    var payload = new Uint8Array(data, 8);
     switch (type) {
       case 0: { var j = this.json(payload); if (!j) return; this.pong = j.pong; this.emit('status', j); break; }
       case 1: { var j1 = this.json(payload); if (!j1) return; this.emit('init', j1); break; }
@@ -263,31 +268,34 @@
       case 4: { var j4 = this.json(payload); if (!j4) return; this.pong = j4.pong; this.emit('fw', j4); break; }
       case 5: this.emit('reload'); break;
       case 100: {
-        var l = new Uint32Array(payload.slice(0, 4))[0];
-        if (l + 4 !== payload.byteLength) { console.warn('h264 single len', l, payload.byteLength); break; }
-        this.emit('video', new Uint8Array(payload.slice(4)));
+        if (payload.byteLength < 4) { this.emit('videodrop'); break; }
+        var l = new DataView(data).getUint32(8, true);
+        if (l + 4 !== payload.byteLength) { console.warn('h264 single len', l, payload.byteLength); this.emit('videodrop'); break; }
+        this.emit('video', new Uint8Array(data, 12));
         break;
       }
       case 101: {
-        var total = new Uint32Array(payload.slice(0, 4))[0];
-        if (total > 4000000) { console.warn('h264 first too big', total); break; }
+        if (payload.byteLength < 4) { this.h264 = null; this.emit('videodrop'); break; }
+        var total = new DataView(data).getUint32(8, true);
+        if (this.h264) this.emit('videodrop');           // previous access unit never completed
+        if (total > 4000000) { console.warn('h264 first too big', total); this.h264 = null; this.emit('videodrop'); break; }
         this.h264 = new Uint8Array(total);
         this.h264off = payload.byteLength - 4;
-        if (this.h264off > total) { this.h264 = null; break; }
-        this.h264.set(new Uint8Array(payload.slice(4)), 0);
+        if (this.h264off > total) { this.h264 = null; this.emit('videodrop'); break; }
+        this.h264.set(new Uint8Array(data, 12), 0);
         break;
       }
       case 102: {
         if (!this.h264) break;
-        if (this.h264off + payload.byteLength > this.h264.byteLength) { this.h264 = null; break; }
-        this.h264.set(new Uint8Array(payload), this.h264off);
+        if (this.h264off + payload.byteLength > this.h264.byteLength) { this.h264 = null; this.emit('videodrop'); break; }
+        this.h264.set(payload, this.h264off);
         this.h264off += payload.byteLength;
         break;
       }
       case 103: {
         if (!this.h264) break;
-        if (this.h264off + payload.byteLength > this.h264.byteLength) { this.h264 = null; break; }
-        this.h264.set(new Uint8Array(payload), this.h264off);
+        if (this.h264off + payload.byteLength > this.h264.byteLength) { this.h264 = null; this.emit('videodrop'); break; }
+        this.h264.set(payload, this.h264off);
         this.h264off += payload.byteLength;
         var frame = this.h264; this.h264 = null;
         this.emit('video', frame);

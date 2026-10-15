@@ -5,21 +5,29 @@
  * textures and converted to RGB in a WebGL shader, so the only per-frame CPU cost
  * besides the decoder is the texture upload.
  *
- * Messages in : {id:'init', canvas, simd}   {id:'decode', data:ArrayBuffer}   {id:'clear'}
- * Messages out: {id:'ready'} {id:'size',w,h} {id:'key'} {id:'needkey'} {id:'stats',...}
- *               {id:'error', message}
+ * Flow control lives on the main thread: it posts one access unit at a time and waits
+ * for 'done' before posting the next (newest wins, older ones are dropped there). A
+ * worker cannot drop on its own — its message queue is only visible one message at a
+ * time, so a backlog would just grow and add latency.
+ *
+ * Messages in : {id:'init', canvas, simd}   {id:'decode', data:ArrayBuffer, off, len, lost}   {id:'clear'}
+ * Messages out: {id:'ready', gl2} {id:'done'} {id:'size',w,h} {id:'key'} {id:'needkey'} {id:'refresh'}
+ *               {id:'stats', dec, ms, wait} {id:'error', message}
+ *   needkey : decoding cannot start (or restart) until an IDR arrives
+ *   refresh : decoding continues but a reference frame was lost; a new IDR would clean the picture
  */
 'use strict';
 
 var Module = null;
 var gl = null, isGL2 = false, canvas = null;
-var tex = [], uMatrix = null, uOffset = null;
+var prog = null, tex = [], uMatrix = null, uOffset = null;
+var glLost = false, lostTimer = 0;
 var inPtr = 0, inCap = 0;
-var waitKey = true;
+var waitKey = true;         // nothing decodable until an SPS/IDR shows up
+var lostRef = false;        // a frame was skipped: references are broken until the next IDR
+var refreshAsked = false;
 var lastW = 0, lastH = 0, lastCs = -1, lastRange = -1;
-var stats = { rx: 0, dec: 0, ms: 0, drop: 0 };
-var queue = null;     // newest undecoded AU while a decode is running (never more than one)
-var busy = false;
+var stats = { dec: 0, ms: 0, wait: 0 };
 var packed = [null, null, null];
 
 /* ------------------------------------------------------------------ WebGL */
@@ -31,6 +39,30 @@ function initGL(c) {
   isGL2 = !!gl;
   if (!gl) gl = c.getContext('webgl', opts) || c.getContext('experimental-webgl', opts);
   if (!gl) throw new Error('no webgl');
+  // The GPU process can go away under a long session (memory pressure, driver reset). Without
+  // preventDefault the context is gone for good and every GL call turns into a silent no-op:
+  // the picture freezes while the decoder keeps reporting frames. Allow a restore, rebuild the
+  // GL state when it comes back, and give up (so the app falls back to MJPEG) if it never does.
+  c.addEventListener('webglcontextlost', function (e) {
+    e.preventDefault();
+    glLost = true;
+    if (!lostTimer) lostTimer = setTimeout(function () { self.postMessage({ id: 'error', message: 'webgl context lost' }); }, 10000);
+  });
+  c.addEventListener('webglcontextrestored', function () {
+    if (lostTimer) { clearTimeout(lostTimer); lostTimer = 0; }
+    try {
+      setupGL();
+      glLost = false;
+      self.postMessage({ id: 'refresh' });   // ask for a frame to repaint the (now black) canvas
+    } catch (e) {
+      self.postMessage({ id: 'error', message: 'webgl restore: ' + (e && e.message) });
+    }
+  });
+  setupGL();
+}
+
+/** (Re)create program, quad and textures; valid for the current GL context only. */
+function setupGL() {
   var vs = 'attribute vec2 p; varying vec2 t; void main(){ gl_Position = vec4(p,0.0,1.0); t = vec2((p.x+1.0)*0.5, (1.0-p.y)*0.5); }';
   var fs = 'precision mediump float; varying vec2 t; uniform sampler2D y; uniform sampler2D u; uniform sampler2D v;' +
     'uniform mat3 m; uniform vec3 o;' +
@@ -40,7 +72,7 @@ function initGL(c) {
     if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
     return s;
   }
-  var prog = gl.createProgram();
+  prog = gl.createProgram();
   gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs));
   gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs));
   gl.linkProgram(prog);
@@ -52,6 +84,7 @@ function initGL(c) {
   var p = gl.getAttribLocation(prog, 'p');
   gl.enableVertexAttribArray(p);
   gl.vertexAttribPointer(p, 2, gl.FLOAT, false, 0, 0);
+  tex = [];
   ['y', 'u', 'v'].forEach(function (name, i) {
     var t = gl.createTexture();
     gl.activeTexture(gl.TEXTURE0 + i);
@@ -66,6 +99,8 @@ function initGL(c) {
   uMatrix = gl.getUniformLocation(prog, 'm');
   uOffset = gl.getUniformLocation(prog, 'o');
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  lastW = lastH = 0;            // viewport and canvas size are re-applied on the next frame
+  lastCs = lastRange = -1;
   setColor(2, 1);
 }
 
@@ -107,6 +142,7 @@ function upload(i, ptr, stride, w, h) {
 function draw() {
   var w = Module._dec_width(), h = Module._dec_height();
   if (!w || !h) return;
+  if (glLost || gl.isContextLost()) return;
   if (w !== lastW || h !== lastH) {
     lastW = w; lastH = h;
     canvas.width = w; canvas.height = h;
@@ -137,10 +173,19 @@ function hasKey(u8) {
   return false;
 }
 
-function decodeAU(u8) {
+function decodeAU(u8, lost) {
+  var key = hasKey(u8);
+  if (key) { lostRef = false; refreshAsked = false; }
+  else if (lost) lostRef = true;
   if (waitKey) {
-    if (!hasKey(u8)) { self.postMessage({ id: 'needkey' }); return; }
+    // Not a decoder problem: frames skipped here must not count as "too slow".
+    if (!key) { stats.wait++; self.postMessage({ id: 'needkey' }); return; }
     Module._dec_flush();
+  } else if (lostRef && !refreshAsked) {
+    // Keep decoding (the picture moves, with artefacts) and ask once for a clean IDR;
+    // the iPhone only sends one when asked.
+    refreshAsked = true;
+    self.postMessage({ id: 'refresh' });
   }
   if (u8.length > inCap) {
     if (inPtr) Module._free(inPtr);
@@ -160,18 +205,9 @@ function decodeAU(u8) {
   }
 }
 
-function pump() {
-  if (busy || !queue) return;
-  busy = true;
-  var u8 = queue; queue = null;
-  try { decodeAU(u8); } catch (e) { self.postMessage({ id: 'error', message: String(e && e.message) }); }
-  busy = false;
-  if (queue) pump();
-}
-
 setInterval(function () {
-  self.postMessage({ id: 'stats', rx: stats.rx, dec: stats.dec, ms: stats.ms, drop: stats.drop });
-  stats = { rx: 0, dec: 0, ms: 0, drop: 0 };
+  self.postMessage({ id: 'stats', dec: stats.dec, ms: stats.ms, wait: stats.wait });
+  stats = { dec: 0, ms: 0, wait: 0 };
 }, 1000);
 
 self.onmessage = function (ev) {
@@ -198,14 +234,16 @@ self.onmessage = function (ev) {
       self.postMessage({ id: 'error', message: String(e && e.message) });
     }
   } else if (d.id === 'decode') {
-    if (!Module) return;
-    stats.rx++;
-    if (queue) stats.drop++;
-    queue = new Uint8Array(d.data);
-    pump();
+    var off = d.off || 0, len = d.len === undefined ? d.data.byteLength - off : d.len;
+    if (Module && len > 0) {
+      try { decodeAU(new Uint8Array(d.data, off, len), !!d.lost); }
+      catch (e) { self.postMessage({ id: 'error', message: String(e && e.message) }); }
+    }
+    self.postMessage({ id: 'done' });
   } else if (d.id === 'clear') {
-    waitKey = true; queue = null;
+    waitKey = true; lostRef = false; refreshAsked = false;
+    lastW = lastH = 0;            // report the size of the next stream even if it is the same
     if (Module) Module._dec_flush();
-    if (gl) { gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); }
+    if (gl && !glLost && !gl.isContextLost()) { gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); }
   }
 };

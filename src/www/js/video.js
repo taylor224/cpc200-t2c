@@ -8,8 +8,11 @@
  *  H.264  The adapter forwards the iPhone's H.264 stream over the WebSocket. Frames
  *         are decoded in a Web Worker by FFmpeg compiled to WebAssembly and painted
  *         through WebGL on an OffscreenCanvas (js/h264worker.js). 3–5× less bandwidth
- *         than MJPEG and no transcoding inside the adapter. If the worker cannot keep
- *         up, 'slow' is reported and the app falls back to MJPEG.
+ *         than MJPEG and no transcoding inside the adapter. One access unit is in
+ *         flight at a time; while the worker is busy the newest arrival replaces the
+ *         waiting one (a dropped frame breaks the reference chain, so the worker then
+ *         asks for a fresh IDR). If the worker cannot keep up, 'slow' is reported and
+ *         the app falls back to MJPEG.
  *
  * Canvas backing stores always have the frame's own size; CSS object-fit does the
  * scaling. Touch coordinates are mapped back through the same fit rule.
@@ -31,10 +34,14 @@
     this.frameW = 0; this.frameH = 0;
     this.ctx = null;
     this.abort = null;
-    this.pending = null;
-    this.decoding = false;
+    this.pending = null;          // newest undecoded JPEG (MJPEG) or access unit (H.264)
+    this.decoding = false;        // MJPEG: createImageBitmap running
+    this.inflight = false;        // H.264: access unit posted, 'done' not yet received
+    this.lost = false;            // H.264: a frame was dropped since the last one posted
     this.worker = null; this.workerReady = false;
+    this.broken = false;          // the worker failed; its canvas cannot be handed to a new one, so H.264 is out until reload
     this.slowSeconds = 0;
+    this.rxSec = 0;               // H.264 frames received since the worker's last stats report
     this.showStats = false;
     this.stats = this.resetStats();
     this.statsTimer = 0;
@@ -229,7 +236,7 @@
 
   VideoPresenter.prototype.paint = function (bmp) {
     if (!this.ctx || this.mode !== 'mjpeg') { bmp.close(); return; }
-    if (bmp.width !== this.canvas.width || bmp.height !== this.canvas.height) {
+    if (bmp.width !== this.frameW || bmp.height !== this.frameH) {
       this.canvas.width = bmp.width; this.canvas.height = bmp.height;
       this.frameW = bmp.width; this.frameH = bmp.height;
       this.onMessage('size', bmp.width, bmp.height);
@@ -245,19 +252,19 @@
     var self = this;
     this.stop();
     this.mode = 'h264';
-    this.slowSeconds = 0;
+    this.slowSeconds = 0; this.rxSec = 0;
     this.showSurface('worker');
     if (this.worker) { this.worker.postMessage({ id: 'clear' }); return; }
     try {
       var off = this.canvasWorker.transferControlToOffscreen();
       this.worker = new Worker('js/h264worker.js');
       this.worker.onmessage = function (ev) { self.onWorkerMessage(ev.data); };
-      this.worker.onerror = function (e) { self.onMessage('h264error', String(e && e.message)); };
+      this.worker.onerror = function (e) { self.broken = true; self.onMessage('h264error', String(e && e.message)); };
       var simd = VideoPresenter.wasmSimd();
       try { if (localStorage.getItem('t2c.nosimd') === '1') simd = false; } catch (e) { /* ignore */ }
       this.worker.postMessage({ id: 'init', canvas: off, simd: simd }, [off]);
     } catch (e) {
-      this.worker = null;
+      this.worker = null; this.broken = true;
       this.onMessage('h264error', String(e && e.message));
     }
   };
@@ -266,26 +273,49 @@
     if (!d) return;
     switch (d.id) {
       case 'ready': this.workerReady = true; this.onMessage('ready', d.gl2); break;
+      case 'done': this.inflight = false; this.postNext(); break;
       case 'size': this.frameW = d.w; this.frameH = d.h; this.onMessage('size', d.w, d.h); break;
       case 'key': this.onMessage('key'); break;
       case 'needkey': this.onMessage('needkey'); break;
-      case 'error': this.onMessage('h264error', d.message); break;
-      case 'stats':
-        if (this.mode !== 'h264') break;
-        this.stats.painted += d.dec; this.stats.decodeMs += d.ms; this.stats.decodeN += d.dec; this.stats.dropped += d.drop;
-        // Decoder cannot keep up: more than 40 % of the received frames dropped for 5 s.
-        if (d.rx >= 12 && d.dec < d.rx * 0.6) { if (++this.slowSeconds >= 5) { this.slowSeconds = 0; this.onMessage('slow'); } }
+      case 'refresh': this.onMessage('refresh'); break;
+      case 'error': this.broken = true; this.onMessage('h264error', d.message); break;
+      case 'stats': {
+        if (this.mode !== 'h264') { this.rxSec = 0; break; }
+        this.stats.painted += d.dec; this.stats.decodeMs += d.ms; this.stats.decodeN += d.dec;
+        // Decoder cannot keep up: more than 40 % of the frames it was offered went undecoded
+        // for 5 s. Frames skipped while waiting for a key frame are the stream's fault, not
+        // the decoder's, and do not count.
+        var offered = this.rxSec - d.wait;
+        this.rxSec = 0;
+        if (offered >= 12 && d.dec < offered * 0.6) { if (++this.slowSeconds >= 5) { this.slowSeconds = 0; this.onMessage('slow'); } }
         else this.slowSeconds = 0;
         break;
+      }
     }
   };
 
   /** Feed one Annex-B access unit (Uint8Array, ownership transferred). */
   VideoPresenter.prototype.feedH264 = function (u8) {
     if (this.mode !== 'h264' || !this.worker) return;
-    this.stats.rx++; this.stats.bytes += u8.byteLength;
-    var buf = (u8.byteOffset === 0 && u8.byteLength === u8.buffer.byteLength) ? u8.buffer : u8.slice().buffer;
-    this.worker.postMessage({ id: 'decode', data: buf }, [buf]);
+    this.stats.rx++; this.stats.bytes += u8.byteLength; this.rxSec++;
+    if (this.pending) { this.stats.dropped++; this.lost = true; }
+    this.pending = u8;
+    this.postNext();
+  };
+
+  /** The stream lost an access unit before it reached us (reassembly failure). */
+  VideoPresenter.prototype.noteDrop = function () {
+    if (this.mode !== 'h264') return;
+    this.stats.dropped++; this.lost = true;
+  };
+
+  VideoPresenter.prototype.postNext = function () {
+    if (this.inflight || !this.pending || !this.worker) return;
+    var u8 = this.pending; this.pending = null;
+    this.inflight = true;
+    var lost = this.lost; this.lost = false;
+    // The buffer is ours (fresh from the WebSocket or assembled here): hand it over instead of copying.
+    this.worker.postMessage({ id: 'decode', data: u8.buffer, off: u8.byteOffset, len: u8.byteLength, lost: lost }, [u8.buffer]);
   };
 
   /* ----------------------------------------------------------------- misc */
@@ -302,7 +332,8 @@
     if (this.abort) { try { this.abort.abort(); } catch (e) { /* ignore */ } this.abort = null; }
     if (this.img && this.mode === 'img') { this.img.removeAttribute('src'); }
     if (this.worker && this.mode === 'h264') this.worker.postMessage({ id: 'clear' });
-    this.pending = null; this.decoding = false;
+    this.pending = null; this.decoding = false; this.lost = false;
+    this.frameW = 0; this.frameH = 0;     // the next stream reports its size again
     this.mode = 'idle';
     this.stats = this.resetStats();
   };
