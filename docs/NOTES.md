@@ -83,9 +83,16 @@ and a hello restarts nothing. The override itself lives in lylinkui's RAM, so af
 reboot the first session can come up at the preset size; the page compares the size of the
 picture that arrives with what it asked for (`verifySession()`), restarts once if they differ,
 and if they still differ falls back to the old Auto flow (`localStorage t2c.sessAuto`, cleared
-when the user changes the size settings). *Not yet checked on the device:* that the override
-is honoured with `pixel ∈ {0, 1}` — the disassembly says the override replaces every preset,
-the fallback covers the case that it does not.
+when the user changes the size settings).
+
+Checked on the device (2026-10-15, direct WebSocket probe and the page itself): the override
+is honoured with pixel 2, 0 and 3 alike; it survives in RAM across restarts and is applied on a
+restart without a new hello; a hello with `link == 1` restarted nothing. The page at 773×601
+produced a 768×608 session (`LYLINK_VIDEO_START 768x608`), switching to *Sharp* restarted it at
+1184×912 with `CreateCarPlay display physical:228 * 175`, so the UI-size setting reaches the
+iPhone too. Before this flow the device log showed sessions at 800×490 (the Auto formula from the
+hello) next to a 1552×944 one (an override that did get applied), i.e. the old reload-for-a-hello
+approach applied the override only sometimes — the user's "changing the size does nothing".
 
 In picture mode the H.264 from the iPhone is decoded and re‑encoded as JPEG by the
 Allwinner V831 hardware at the session size, then pushed over `/video.jpg`. Limits used
@@ -107,14 +114,17 @@ canvas, and the Tesla browser has no WebCodecs. The iPhone's stream is High prof
 single‑threaded, ~1.4 MB). `js/h264worker.js` decodes complete access units
 (`AV_CODEC_FLAG_LOW_DELAY`) and uploads the YUV planes to three textures; BT.601/709 and
 range come from the SPS VUI. Flow control is on the main thread (`video.js`): one access
-unit is in flight, the newest arrival replaces a waiting one, and a frame dropped that way
-breaks the reference chain, so the worker asks for a fresh IDR (`refresh` → `CMD.KEYFRAME`;
-the iPhone only sends one on request — a measured single dropped P‑frame leaves the picture
-at 21–28 dB PSNR for hundreds of frames otherwise). A worker cannot do this itself: its
-message queue is only visible one message at a time, so until 26101504 nothing was ever
-dropped and a slow decoder just accumulated latency. The WebGL context is allowed to be lost
-and restored (`webglcontextlost` + `preventDefault`); if it does not come back in 10 s the
-app falls back to MJPEG for an hour. Threads are impossible because
+unit is in flight and the rest wait in order; every unit is decoded, but when newer ones are
+waiting the worker is asked to decode only (`draw: false`), so a burst costs decode time and
+no latency. Nothing is dropped on purpose: a skipped P‑frame breaks the reference chain until
+the next IDR (measured: 21–28 dB PSNR for hundreds of frames), and the iPhone sends an IDR only
+on request (`CMD.KEYFRAME` — verified on the device: each request yields one, even on a static
+screen). A first version that kept only the newest waiting unit dropped 11–28 frames in 20 s on
+the real stream, because the adapter hands units over in bursts, and left the picture green
+until the next IDR. The only drop left is a 3 s backlog (decoder hopeless); a backlog above 15
+units for 5 s, or more than 40 % of the offered units undecoded, is the 'slow' verdict. The
+WebGL context is allowed to be lost and restored (`webglcontextlost` + `preventDefault`); if
+it does not come back in 10 s the app falls back to MJPEG for an hour. Threads are impossible because
 the adapter's server cannot send COOP/COEP. libwebsockets 3.2 refuses unknown
 extensions, so the module ships as `h264dec.wasm.txt` and is loaded via `wasmBinary`.
 
@@ -336,10 +346,11 @@ could go wrong over a long drive were event paths, fixed after 26101504:
   that ignored key‑frame requests the page fell back within 5 s of connecting. Frames skipped
   for a missing IDR are now reported separately (`wait`) and do not count; the memory of a
   verdict is an expiry time, a week for *slow*, an hour for crashes and lost GPU contexts.
-- No newest‑wins drop ever happened in the worker (see "H.264 in the browser"), and a drop
-  never asked for an IDR. Both fixed; `devserver.py --burst 12` sends 12 access units at once
-  every 5 s to exercise it (10 dropped, one `cmd 8` per burst), `--no-keyframes` makes the mock
-  ignore key‑frame requests (the page must wait, not fall back).
+- No newest‑wins drop ever happened in the worker (see "H.264 in the browser"): a slow decoder
+  accumulated latency without limit. Replaced by decode‑everything / draw‑the‑newest with a
+  backlog limit; `devserver.py --burst 12` sends 12 access units at once every 5 s to exercise
+  it (0 dropped), `--no-keyframes` makes the mock ignore key‑frame requests (the page must wait,
+  not fall back). Key‑frame requests are rate‑limited to one a second but never dropped.
 - WebGL context loss in the worker was unhandled: the picture would freeze while the stats
   kept reporting decoded frames, with no way out short of a reload.
 - Reloads are guarded: more than four within a minute (a setting the adapter does not take,
@@ -352,3 +363,24 @@ could go wrong over a long drive were event paths, fixed after 26101504:
   stalls while HTTP keeps answering (recovery is the "Use this screen" button); whether the
   Tesla keyboard changes `innerHeight` (which would re‑apply the session size while typing a
   name) has not been checked in the car.
+
+## Car's own app in CarPlay, resolver list (2026-10-15)
+
+- The icon of the car's app in the CarPlay grid is `/tmp/lylink/home.png`, which lylinkui copies
+  from `app/www/icon/<id>.png` when an icon id is set and from `/mnt/customer/app/Auto.png`
+  otherwise (`CPClientSetOemIconsPath`, `picSize :180`). The name is the 12‑byte car name
+  (`Auto` by default, a string inside lylinkui with no slack to patch). The build replaces
+  `Auto.png` with `src/www/icon/ck00.png` (gear + car, 180×180) and the page sends the identity
+  `Carlinkit` once when the adapter still reports `Auto`; lylinkui stores it (the next init JSON
+  reports it) and the iPhone showed "Carlinkit" under the icon.
+- `app/www/icon.json` is the list the init JSON's `icons` comes from; it was missing from the
+  rebuilt page, so the icon picker was empty on the device.
+- `app/udhcpd.conf` hands the car `8.8.8.8 1.1.1.1 192.168.3.1` instead of
+  `8.8.8.8 114.114.114.114 192.168.3.1`. Measured through the adapter from Korea: 8.8.8.8
+  120–270 ms, 114.114.114.114 220–320 ms, 1.1.1.1 80–90 ms, the adapter itself times out
+  (while the phone has internet it drops every query that is not in its table). Turning that
+  drop into REFUSED would let a resolver fail over at once, but the stock REFUSED path sits
+  behind the `tesla` catch‑all, so it needs its own cave — not done.
+- The phone page shows memory *used* (`MemTotal − MemAvailable`) and a CPU busy share
+  (`t2c.cgi?a=info` samples `/proc/stat` twice, 0.3 s apart, `cpu_pct`; `cgi` is 4). The
+  adapter runs at load 2–2.8 on its single core while a session is up.

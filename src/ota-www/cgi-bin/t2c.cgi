@@ -3,7 +3,7 @@
 # The stock index.cgi stays in charge of settings/upload; this script only adds a few
 # fixed actions. Nothing from the request is ever passed to a shell command.
 #
-#   GET  ?a=info          JSON: uptime, memory, storage, access-point summary, versions
+#   GET  ?a=info          JSON: uptime, load, CPU busy %, memory, storage, access-point summary, versions
 #   GET  ?a=reboot        reply, then reboot two seconds later
 #   GET  ?a=log           plain-text dmesg + logcat (not obfuscated like id=logcat)
 #   GET  ?a=cat&f=NAME    one of a fixed list of diagnostic files / listings
@@ -54,6 +54,9 @@ info)
   lycfg=0; [ -f /mnt/UDISK/lycfg.txt ] && lycfg=1
   devname=''; [ -s $NAMEFILE ] && devname=$(head -c 12 $NAMEFILE)
   carname=''; [ $lycfg = 1 ] && carname=$(tail -c +21 /mnt/UDISK/lycfg.txt | head -c 12 | tr -d '\000')
+  # CPU busy share over a short window (/proc/stat: user nice system idle iowait irq softirq ...)
+  c1=$(head -1 /proc/stat); usleep 300000 2>/dev/null || sleep 1; c2=$(head -1 /proc/stat)
+  cpu=$(printf '%s\n%s\n' "$c1" "$c2" | awk 'NR==1{for(i=2;i<=NF;i++)t1+=$i; i1=$5+$6} NR==2{for(i=2;i<=NF;i++)t2+=$i; i2=$5+$6} END{d=t2-t1; if(d>0) printf "%d", (d-(i2-i1))*100/d; else printf "0"}')
   btname=''; gp=$(pidof gocsdk 2>/dev/null | cut -d' ' -f1)
   [ -n "$gp" ] && btname=$(tr '\000' '\n' < /proc/$gp/cmdline 2>/dev/null | sed -n 's/^-N//p' | head -1)
   json_hdr
@@ -63,7 +66,7 @@ info)
   set -- $tp; printf ',"tmp":{"total_kb":%s,"used_kb":%s,"avail_kb":%s}' "$(num "$1")" "$(num "$2")" "$(num "$3")"
   printf ',"ssid":"%s","psk":"%s","channel":%s,"hostapd":%s,"clients":%s,"appver":"%s","lycfg":%s,"wifi_edit":%s' \
     "$(je "$ssid")" "$(je "$psk")" "$(num "$ch")" "$hap" "$(num "$cl")" "$(je "$appver")" "$lycfg" "$lycfg"
-  printf ',"devname":"%s","carname":"%s","btname":"%s","cgi":3}' "$(je "$devname")" "$(je "$carname")" "$(je "$btname")"
+  printf ',"devname":"%s","carname":"%s","btname":"%s","cpu_pct":%s,"cgi":4}' "$(je "$devname")" "$(je "$carname")" "$(je "$btname")" "$(num "$cpu")"
   ;;
 reboot)
   json_hdr; printf '{"code":0}'

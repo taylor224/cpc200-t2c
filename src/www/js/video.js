@@ -8,11 +8,12 @@
  *  H.264  The adapter forwards the iPhone's H.264 stream over the WebSocket. Frames
  *         are decoded in a Web Worker by FFmpeg compiled to WebAssembly and painted
  *         through WebGL on an OffscreenCanvas (js/h264worker.js). 3–5× less bandwidth
- *         than MJPEG and no transcoding inside the adapter. One access unit is in
- *         flight at a time; while the worker is busy the newest arrival replaces the
- *         waiting one (a dropped frame breaks the reference chain, so the worker then
- *         asks for a fresh IDR). If the worker cannot keep up, 'slow' is reported and
- *         the app falls back to MJPEG.
+ *         than MJPEG and no transcoding inside the adapter. Every access unit is
+ *         decoded (a skipped one breaks the reference chain until the next IDR, and the
+ *         iPhone sends those rarely); when several are waiting, only the newest is
+ *         drawn, so a burst costs decode time but no latency. If the backlog keeps
+ *         growing the decoder cannot keep up: 'slow' is reported and the app falls
+ *         back to MJPEG.
  *
  * Canvas backing stores always have the frame's own size; CSS object-fit does the
  * scaling. Touch coordinates are mapped back through the same fit rule.
@@ -34,8 +35,9 @@
     this.frameW = 0; this.frameH = 0;
     this.ctx = null;
     this.abort = null;
-    this.pending = null;          // newest undecoded JPEG (MJPEG) or access unit (H.264)
+    this.pending = null;          // MJPEG: newest undecoded JPEG
     this.decoding = false;        // MJPEG: createImageBitmap running
+    this.queue = [];              // H.264: access units waiting for the worker, oldest first
     this.inflight = false;        // H.264: access unit posted, 'done' not yet received
     this.lost = false;            // H.264: a frame was dropped since the last one posted
     this.worker = null; this.workerReady = false;
@@ -66,7 +68,7 @@
   /* --------------------------------------------------------------- common */
 
   VideoPresenter.prototype.resetStats = function () {
-    return { rx: 0, painted: 0, dropped: 0, bytes: 0, decodeMs: 0, decodeN: 0, t0: now(), fps: 0, rxfps: 0, kbps: 0, dec: 0 };
+    return { rx: 0, painted: 0, dropped: 0, skipped: 0, bytes: 0, decodeMs: 0, decodeN: 0, t0: now(), fps: 0, rxfps: 0, kbps: 0, dec: 0 };
   };
 
   VideoPresenter.prototype.setFit = function (fit) {
@@ -95,10 +97,10 @@
         ' · rx ' + s.rxfps.toFixed(1) +
         ' · ' + Math.round(s.kbps) + ' ' + (I ? I.t('stat.kbps') : 'kbit/s') +
         ' · ' + (I ? I.t('stat.decode') : 'decode') + ' ' + s.dec.toFixed(1) + ' ms' +
-        ' · ' + (I ? I.t('stat.dropped') : 'dropped') + ' ' + s.dropped +
+        ' · ' + (I ? I.t('stat.dropped') : 'dropped') + ' ' + s.dropped + (s.skipped ? '+' + s.skipped : '') +
         ' · ' + this.frameW + '×' + this.frameH + ' ' + this.mode;
     }
-    s.rx = 0; s.painted = 0; s.bytes = 0; s.decodeMs = 0; s.decodeN = 0; s.t0 = t;
+    s.rx = 0; s.painted = 0; s.skipped = 0; s.bytes = 0; s.decodeMs = 0; s.decodeN = 0; s.t0 = t;
   };
 
   VideoPresenter.prototype.showSurface = function (which) {
@@ -287,19 +289,29 @@
         // the decoder's, and do not count.
         var offered = this.rxSec - d.wait;
         this.rxSec = 0;
-        if (offered >= 12 && d.dec < offered * 0.6) { if (++this.slowSeconds >= 5) { this.slowSeconds = 0; this.onMessage('slow'); } }
+        var behind = this.queue.length > VideoPresenter.H264_LATE;
+        if (behind || (offered >= 12 && d.dec < offered * 0.6)) { if (++this.slowSeconds >= 5) { this.slowSeconds = 0; this.onMessage('slow'); } }
         else this.slowSeconds = 0;
         break;
       }
     }
   };
 
+  /* Backlog that means the decoder is hopelessly behind (3 s at 30 fps): the queue is thrown
+   * away so memory stays bounded; the picture is broken until an IDR anyway and the 'slow'
+   * verdict follows. A backlog above H264_LATE for 5 s counts as slow as well. */
+  VideoPresenter.H264_GIVEUP = 90;
+  VideoPresenter.H264_LATE = 15;
+
   /** Feed one Annex-B access unit (Uint8Array, ownership transferred). */
   VideoPresenter.prototype.feedH264 = function (u8) {
     if (this.mode !== 'h264' || !this.worker) return;
     this.stats.rx++; this.stats.bytes += u8.byteLength; this.rxSec++;
-    if (this.pending) { this.stats.dropped++; this.lost = true; }
-    this.pending = u8;
+    this.queue.push(u8);
+    if (this.queue.length > VideoPresenter.H264_GIVEUP) {
+      this.stats.dropped += this.queue.length; this.queue = []; this.lost = true;
+      this.onMessage('refresh');
+    }
     this.postNext();
   };
 
@@ -310,12 +322,15 @@
   };
 
   VideoPresenter.prototype.postNext = function () {
-    if (this.inflight || !this.pending || !this.worker) return;
-    var u8 = this.pending; this.pending = null;
+    if (this.inflight || !this.queue.length || !this.worker) return;
+    var u8 = this.queue.shift();
     this.inflight = true;
     var lost = this.lost; this.lost = false;
+    // Newer frames waiting: decode this one for its references only, the newest gets drawn.
+    var draw = this.queue.length === 0;
+    if (!draw) this.stats.skipped++;
     // The buffer is ours (fresh from the WebSocket or assembled here): hand it over instead of copying.
-    this.worker.postMessage({ id: 'decode', data: u8.buffer, off: u8.byteOffset, len: u8.byteLength, lost: lost }, [u8.buffer]);
+    this.worker.postMessage({ id: 'decode', data: u8.buffer, off: u8.byteOffset, len: u8.byteLength, lost: lost, draw: draw }, [u8.buffer]);
   };
 
   /* ----------------------------------------------------------------- misc */
@@ -332,7 +347,7 @@
     if (this.abort) { try { this.abort.abort(); } catch (e) { /* ignore */ } this.abort = null; }
     if (this.img && this.mode === 'img') { this.img.removeAttribute('src'); }
     if (this.worker && this.mode === 'h264') this.worker.postMessage({ id: 'clear' });
-    this.pending = null; this.decoding = false; this.lost = false;
+    this.pending = null; this.decoding = false; this.queue = []; this.lost = false;
     this.frameW = 0; this.frameH = 0;     // the next stream reports its size again
     this.mode = 'idle';
     this.stats = this.resetStats();

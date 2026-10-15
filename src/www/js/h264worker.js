@@ -6,11 +6,12 @@
  * besides the decoder is the texture upload.
  *
  * Flow control lives on the main thread: it posts one access unit at a time and waits
- * for 'done' before posting the next (newest wins, older ones are dropped there). A
- * worker cannot drop on its own — its message queue is only visible one message at a
- * time, so a backlog would just grow and add latency.
+ * for 'done' before posting the next. Every unit is decoded (a skipped one breaks the
+ * reference chain until the next IDR); when newer ones are already waiting the main
+ * thread asks for decode only (draw: false), so a burst costs no latency. A worker
+ * cannot do this itself: its message queue is only visible one message at a time.
  *
- * Messages in : {id:'init', canvas, simd}   {id:'decode', data:ArrayBuffer, off, len, lost}   {id:'clear'}
+ * Messages in : {id:'init', canvas, simd}   {id:'decode', data:ArrayBuffer, off, len, lost, draw}   {id:'clear'}
  * Messages out: {id:'ready', gl2} {id:'done'} {id:'size',w,h} {id:'key'} {id:'needkey'} {id:'refresh'}
  *               {id:'stats', dec, ms, wait} {id:'error', message}
  *   needkey : decoding cannot start (or restart) until an IDR arrives
@@ -173,7 +174,7 @@ function hasKey(u8) {
   return false;
 }
 
-function decodeAU(u8, lost) {
+function decodeAU(u8, lost, paint) {
   var key = hasKey(u8);
   if (key) { lostRef = false; refreshAsked = false; }
   else if (lost) lostRef = true;
@@ -196,7 +197,7 @@ function decodeAU(u8, lost) {
   var t0 = performance.now();
   var r = Module._dec_decode(inPtr, u8.length);
   if (r > 0) {
-    draw();
+    if (paint) draw();
     stats.ms += performance.now() - t0; stats.dec++;
     if (waitKey) { waitKey = false; self.postMessage({ id: 'key' }); }
   } else if (r < 0) {
@@ -236,7 +237,7 @@ self.onmessage = function (ev) {
   } else if (d.id === 'decode') {
     var off = d.off || 0, len = d.len === undefined ? d.data.byteLength - off : d.len;
     if (Module && len > 0) {
-      try { decodeAU(new Uint8Array(d.data, off, len), !!d.lost); }
+      try { decodeAU(new Uint8Array(d.data, off, len), !!d.lost, d.draw !== false); }
       catch (e) { self.postMessage({ id: 'error', message: String(e && e.message) }); }
     }
     self.postMessage({ id: 'done' });

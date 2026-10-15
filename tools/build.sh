@@ -97,6 +97,23 @@ print('   ' + open(p).read())
 EOF
 fi
 
+echo "== app/Auto.png: default icon of the car's own CarPlay app (Carlinkit)"
+# lylinkui copies this to /tmp/lylink/home.png when no icon is chosen (icon ids map to app/www/icon/<id>.png).
+cp src/www/icon/ck00.png "$WORK/customer/app/Auto.png"
+chmod 755 "$WORK/customer/app/Auto.png"
+
+echo "== app/udhcpd.conf: resolver list for the car"
+# Stock hands out 8.8.8.8, 114.114.114.114 (China) and the adapter. 114 answers from Korea
+# but 2-3x slower than 1.1.1.1; the adapter stays last (it answers carplay.internal).
+python3 - "$WORK/customer/app/udhcpd.conf" <<'EOF'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+a = 'opt     dns     8.8.8.8 114.114.114.114 192.168.3.1'
+assert s.count(a) == 1, 'unexpected udhcpd.conf'
+open(p, 'w').write(s.replace(a, 'opt     dns     8.8.8.8 1.1.1.1 192.168.3.1'))
+EOF
+
 echo "== overlay src/ota-www -> ota/www (phone page at http://192.168.3.1/)"
 [ -f "$WORK/customer/ota/www/cgi-bin/index.cgi" ] || { echo "stock ota/www/cgi-bin/index.cgi missing" >&2; exit 1; }
 rm -rf "$WORK/customer/ota/www/index.html" "$WORK/customer/ota/www/css" "$WORK/customer/ota/www/js"

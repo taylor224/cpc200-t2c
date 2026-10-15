@@ -22,7 +22,7 @@
     'sw.verifying': 'The adapter is checking and preparing the image', 'sw.writing': 'Writing the firmware — the adapter’s Wi‑Fi is off for about a minute; this page waits for it',
     'sw.elapsed': 'Elapsed {t}', 'sw.left': 'about {t} left', 'sw.same': 'The adapter came back with the old version',
     'sec.status': 'Status', 'st.wifi': 'Wi‑Fi network', 'st.channel': 'Channel', 'st.fw': 'Firmware', 'st.hw': 'Hardware',
-    'st.uptime': 'Uptime', 'st.mem': 'Memory free', 'st.clients': 'Connected devices',
+    'st.uptime': 'Uptime', 'st.mem': 'Memory used', 'st.cpu': 'CPU', 'st.clients': 'Connected devices',
     'cp.res': 'Resolution', 'cp.auto': 'Auto', 'cp.res_hint': 'HD 1376×1072, SD 800×800, Auto follows the Tesla page. The Tesla page can override this per session.',
     'cp.icon': 'Car icon', 'cp.btnet': 'BT modem', 'on': 'On', 'off': 'Off',
     'wifi.channel': 'Channel', 'wifi.channel_hint': 'Changing the channel reboots the adapter; your phone reconnects by itself. 36–48 and 149–165 are 5 GHz, 6 is 2.4 GHz.',
@@ -49,7 +49,7 @@
     'sw.verifying': '어댑터가 이미지를 검사하고 준비하는 중', 'sw.writing': '펌웨어 쓰는 중 — 어댑터 Wi‑Fi가 1분쯤 꺼집니다. 이 페이지가 다시 연결될 때까지 기다립니다',
     'sw.elapsed': '경과 {t}', 'sw.left': '약 {t} 남음', 'sw.same': '어댑터가 이전 버전으로 다시 켜졌습니다',
     'sec.status': '상태', 'st.wifi': 'Wi‑Fi 네트워크', 'st.channel': '채널', 'st.fw': '펌웨어', 'st.hw': '하드웨어',
-    'st.uptime': '가동 시간', 'st.mem': '여유 메모리', 'st.clients': '연결된 기기',
+    'st.uptime': '가동 시간', 'st.mem': '메모리 사용', 'st.cpu': 'CPU', 'st.clients': '연결된 기기',
     'cp.res': '해상도', 'cp.auto': '자동', 'cp.res_hint': 'HD 1376×1072, SD 800×800, 자동은 테슬라 페이지를 따릅니다. 테슬라 페이지에서 세션마다 덮어쓸 수 있습니다.',
     'cp.icon': '차량 아이콘', 'cp.btnet': 'BT 모뎀', 'on': '켬', 'off': '끔',
     'wifi.channel': '채널', 'wifi.channel_hint': '채널을 바꾸면 어댑터가 재부팅되고 폰이 자동으로 다시 접속합니다. 36–48, 149–165는 5 GHz, 6은 2.4 GHz입니다.',
@@ -76,7 +76,7 @@
     'sw.verifying': 'アダプターがイメージを検査・準備しています', 'sw.writing': 'ファームウェアを書き込み中 — アダプターの Wi‑Fi が 1 分ほど切れます。このページは再接続を待ちます',
     'sw.elapsed': '経過 {t}', 'sw.left': '残り約 {t}', 'sw.same': 'アダプターが以前のバージョンで起動しました',
     'sec.status': '状態', 'st.wifi': 'Wi‑Fi ネットワーク', 'st.channel': 'チャンネル', 'st.fw': 'ファームウェア', 'st.hw': 'ハードウェア',
-    'st.uptime': '稼働時間', 'st.mem': '空きメモリ', 'st.clients': '接続中のデバイス',
+    'st.uptime': '稼働時間', 'st.mem': 'メモリ使用量', 'st.cpu': 'CPU', 'st.clients': '接続中のデバイス',
     'cp.res': '解像度', 'cp.auto': '自動', 'cp.res_hint': 'HD 1376×1072、SD 800×800、自動は Tesla ページに従います。Tesla ページ側でセッションごとに上書きできます。',
     'cp.icon': '車のアイコン', 'cp.btnet': 'BT モデム', 'on': 'オン', 'off': 'オフ',
     'wifi.channel': 'チャンネル', 'wifi.channel_hint': 'チャンネルを変更するとアダプターが再起動し、スマートフォンは自動で再接続します。36〜48 と 149〜165 は 5 GHz、6 は 2.4 GHz です。',
@@ -103,7 +103,7 @@
     'sw.verifying': '适配器正在校验并准备镜像', 'sw.writing': '正在写入固件 — 适配器的 Wi‑Fi 会关闭约一分钟，本页面会等待其恢复',
     'sw.elapsed': '已用 {t}', 'sw.left': '约剩 {t}', 'sw.same': '适配器以旧版本重新启动',
     'sec.status': '状态', 'st.wifi': 'Wi‑Fi 网络', 'st.channel': '信道', 'st.fw': '固件', 'st.hw': '硬件',
-    'st.uptime': '运行时间', 'st.mem': '可用内存', 'st.clients': '已连接设备',
+    'st.uptime': '运行时间', 'st.mem': '内存占用', 'st.cpu': 'CPU', 'st.clients': '已连接设备',
     'cp.res': '分辨率', 'cp.auto': '自动', 'cp.res_hint': 'HD 1376×1072，SD 800×800，自动跟随 Tesla 页面。Tesla 页面可按会话覆盖此设置。',
     'cp.icon': '车辆图标', 'cp.btnet': 'BT 调制解调器', 'on': '开', 'off': '关',
     'wifi.channel': '信道', 'wifi.channel_hint': '更改信道会重启适配器，手机会自动重新连接。36–48 和 149–165 为 5 GHz，6 为 2.4 GHz。',
@@ -130,7 +130,7 @@
     'sw.verifying': '轉接器正在檢查並準備映像檔', 'sw.writing': '正在寫入韌體 — 轉接器的 Wi‑Fi 會關閉約一分鐘，本頁面會等待其恢復',
     'sw.elapsed': '已過 {t}', 'sw.left': '約剩 {t}', 'sw.same': '轉接器以舊版本重新啟動',
     'sec.status': '狀態', 'st.wifi': 'Wi‑Fi 網路', 'st.channel': '頻道', 'st.fw': '韌體', 'st.hw': '硬體',
-    'st.uptime': '運作時間', 'st.mem': '可用記憶體', 'st.clients': '已連線裝置',
+    'st.uptime': '運作時間', 'st.mem': '記憶體使用', 'st.cpu': 'CPU', 'st.clients': '已連線裝置',
     'cp.res': '解析度', 'cp.auto': '自動', 'cp.res_hint': 'HD 1376×1072，SD 800×800，自動跟隨 Tesla 頁面。Tesla 頁面可依工作階段覆寫此設定。',
     'cp.icon': '車輛圖示', 'cp.btnet': 'BT 數據機', 'on': '開', 'off': '關',
     'wifi.channel': '頻道', 'wifi.channel_hint': '更改頻道會重新啟動轉接器，手機會自動重新連線。36–48 與 149–165 為 5 GHz，6 為 2.4 GHz。',
@@ -240,7 +240,9 @@
     return get('/cgi-bin/t2c.cgi?a=info').then(function (j) {
       info = j;
       $('st-uptime').textContent = fmtUptime(j.uptime);
-      $('st-mem').textContent = fmtKb(j.mem_avail_kb) + ' / ' + fmtKb(j.mem_total_kb);
+      var used = (j.mem_total_kb || 0) - (j.mem_avail_kb || 0);
+      $('st-mem').textContent = j.mem_total_kb ? fmtKb(used) + ' / ' + fmtKb(j.mem_total_kb) + ' (' + Math.round(used * 100 / j.mem_total_kb) + '%)' : '—';
+      $('st-cpu').textContent = (j.cpu_pct != null ? j.cpu_pct + '%' : '—') + (j.load ? ' · load ' + String(j.load).split(' ')[0] : '');
       $('st-clients').textContent = j.clients != null ? j.clients : '—';
       if (j.ssid) $('st-ssid').textContent = j.ssid;
       if (j.channel) { $('st-ch').textContent = j.channel; $('sel-ch').value = String(j.channel); }

@@ -12,7 +12,9 @@
     MAX_H: 1200,
     // CarPlay derives its UI scale from pixels-per-millimetre of the reported screen.
     PX_PER_MM: { small: 6.4, normal: 5.2, large: 4.2 },
-    RESIZE_RELOAD_PX: 48
+    RESIZE_RELOAD_PX: 48,
+    // Name of the car's own app in the CarPlay app grid (the adapter's built-in default is "Auto").
+    CAR_NAME: 'Carlinkit'
   };
 
   var CMD = LinkClient.CMD, KEY = LinkClient.KEY;
@@ -550,7 +552,7 @@
   }
   function sendIdentity() {
     var nameEl = $('car-name');
-    var name = nameEl.value || nameEl.placeholder || 'Auto';
+    var name = nameEl.value || nameEl.placeholder || CONFIG.CAR_NAME;
     link.setCarIdentity(name, state.icon);
   }
 
@@ -573,7 +575,7 @@
     segSet('seg-icon', custom ? 1 : 0);
     grid.classList.toggle('hidden', !custom);
     $('tesla-tm').classList.toggle('hidden', !(custom && /tesla/i.test(state.icons[state.icon])));
-    $('car-name').placeholder = custom ? state.icons[state.icon] : 'Auto';
+    $('car-name').placeholder = custom ? state.icons[state.icon] : CONFIG.CAR_NAME;
   }
 
   /* ---------------------------------------------------- firmware update */
@@ -695,8 +697,11 @@
     segSet('seg-pixel', j.pixel);
     segSet('seg-driver', j.driver);
     segSet('seg-fps', j.fps);
-    $('car-name').value = j.name || '';
+    // The adapter ships with the car name "Auto"; the car's own app is presented as Carlinkit.
+    var stockName = !j.name || j.name === 'Auto';
+    $('car-name').value = stockName ? '' : j.name;
     renderIcons();
+    if (stockName) link.setCarIdentity(CONFIG.CAR_NAME, state.icon);
     $('about-model').textContent = j.SN || '';
     $('about-fw').textContent = j.SW || '';
     $('about-sw').textContent = j.SW || '';
@@ -787,7 +792,6 @@
     function pos(e) { return presenter.toPerMille(e.clientX, e.clientY); }
     if (window.PointerEvent) {
       stage.addEventListener('pointerdown', function (e) {
-        if (e.target.closest('.stage-settings')) return;
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         var p = pos(e); if (!p) return;
         down = true; pendingMove = null;
@@ -811,7 +815,6 @@
       stage.addEventListener('pointercancel', up);
     } else {
       stage.addEventListener('touchstart', function (e) {
-        if (e.target.closest('.stage-settings')) return;
         var p = pos(e.touches[0]); if (!p) return; down = true; link.sendTouch(0, p.x, p.y); e.preventDefault();
       }, { passive: false });
       stage.addEventListener('touchmove', function (e) {
@@ -836,11 +839,6 @@
     });
     $('btn-reload').onclick = function () { location.reload(); };
     $('btn-use-here').onclick = function () { location.reload(); };
-    $('btn-stage-settings').onclick = function () {
-      // Leave the picture, keep the CarPlay session; "Open CarPlay" brings it back.
-      presenter.stop(); showStage(false); showPage('home');
-      state.link = Math.min(state.link, 1); renderHomeStatus();
-    };
     $('btn-open-carplay').onclick = function () { if (requireLink()) { state.link = Math.min(state.link, 1); link.cmd(CMD.VIDEO); } };
     $('btn-qr').onclick = function () {
       var card = $('qr-card');
@@ -885,7 +883,7 @@
     segBind('seg-driver', function (v) { if (!requireLink()) return false; link.setKey(KEY.DRIVER, +v); });
     segBind('seg-icon', function (v) {
       if (!requireLink()) return false;
-      if (+v === 0) { state.icon = ''; $('icon-grid').classList.add('hidden'); $('tesla-tm').classList.add('hidden'); $('car-name').placeholder = 'Auto'; qsa('#icon-grid img').forEach(function (x) { x.classList.remove('on'); }); scheduleIdentity(); }
+      if (+v === 0) { state.icon = ''; $('icon-grid').classList.add('hidden'); $('tesla-tm').classList.add('hidden'); $('car-name').placeholder = CONFIG.CAR_NAME; qsa('#icon-grid img').forEach(function (x) { x.classList.remove('on'); }); scheduleIdentity(); }
       else { $('icon-grid').classList.remove('hidden'); }
     });
     $('car-name').addEventListener('input', function () {
@@ -938,11 +936,13 @@
     segSet('seg-mode', prefs.transport);
     $('stats').checked = !!prefs.stats;
 
-    // The iPhone sends an IDR only when asked; at most one request a second.
-    var keyTimer = 0;
+    // The iPhone sends an IDR only when asked; at most one request a second, but a request
+    // that arrives inside that second is sent when it is over, never dropped.
+    var keyTimer = 0, keyPending = false;
     function requestKeyframe() {
-      if (keyTimer) return;
-      keyTimer = setTimeout(function () { keyTimer = 0; }, 1000);
+      if (keyTimer) { keyPending = true; return; }
+      keyPending = false;
+      keyTimer = setTimeout(function () { keyTimer = 0; if (keyPending) requestKeyframe(); }, 1000);
       if (state.link > 1) link.cmd(CMD.KEYFRAME);
     }
     presenter = new VideoPresenter({

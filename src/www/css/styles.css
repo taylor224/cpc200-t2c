@@ -102,12 +102,6 @@ a { color: inherit; text-decoration: none; }
   font-size: 0.95rem; pointer-events: none; white-space: nowrap;
 }
 .backlist { position: absolute; right: 0.75rem; top: 0.5rem; color: #ff6b6b; font-size: 0.8rem; pointer-events: none; }
-.stage-settings {
-  position: absolute; right: 0.4rem; bottom: 0.4rem; width: 2.2rem; height: 2.2rem; border-radius: 50%;
-  color: #fff; background: rgba(255, 255, 255, 0.18); opacity: 0.55;
-  display: flex; align-items: center; justify-content: center; transition: opacity var(--t), background-color var(--t);
-}
-.stage-settings:active { opacity: 1; background: rgba(255, 255, 255, 0.35); }
 
 /* -------------------------------------------------------------------- app */
 .app { display: flex; width: 100%; height: 100%; background: var(--bg); }
