@@ -61,7 +61,10 @@ default base `https://raw.githubusercontent.com/taylor224/carlinkit-t2c-firmware
 (`CONFIG.UPDATE_BASE_URL` in `src/www/js/app.js` and `src/ota-www/js/ota.js`). It can be
 overridden with `?test=<url>` in the Tesla page URL or the *Update server* field on either
 page. `updates/1508/version.json` carries `appver` (compared by the phone page), `tsl`
-(compared by the Tesla page), `url` (a GitHub release asset) and `msg`. Build a release
+(compared by the Tesla page), `url` and `msg`. `url` points at the copy of the image on the
+orphan `releases` branch (served by raw.githubusercontent.com with CORS headers; GitHub
+release assets are not, so a browser cannot fetch them); the same file is attached to the
+GitHub release for manual download. Build a release
 with `T2C_VERSION=YYMMDDNN tools/build.sh`, which stamps that date into `app/system.json`
 so the adapter reports the new version afterwards. `tools/release.sh YYMMDDNN [NOTES.md]` does the whole
 cycle: build, rewrite `version.json`, commit, push, GitHub release with the image attached.
