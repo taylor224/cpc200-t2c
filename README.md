@@ -57,7 +57,7 @@ and a page reload loop on resize. Carlinkit has not shipped a fix.
 only persist zh‑CN/zh‑TW/en, so the choice is kept in the browser's storage).
 
 **Firmware update server**: both pages read `<base>/<branch>/version.json` (branch `1508`),
-default base `https://raw.githubusercontent.com/taylor224/carlinkit-t2c-firmware/main/updates`
+default base `https://raw.githubusercontent.com/taylor224/cpc200-t2c/main/updates`
 (`CONFIG.UPDATE_BASE_URL` in `src/www/js/app.js` and `src/ota-www/js/ota.js`). It can be
 overridden with `?test=<url>` in the Tesla page URL or the *Update server* field on either
 page. `updates/1508/version.json` carries `appver` (compared by the phone page), `tsl`

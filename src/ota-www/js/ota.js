@@ -7,7 +7,7 @@
   'use strict';
   var CONFIG = {
     // <base>/<branch>/version.json, e.g. .../updates/1508/version.json (editable on the page)
-    UPDATE_BASE_URL: 'https://raw.githubusercontent.com/taylor224/carlinkit-t2c-firmware/main/updates'
+    UPDATE_BASE_URL: 'https://raw.githubusercontent.com/taylor224/cpc200-t2c/main/updates'
   };
   var CHANNELS = [6, 36, 40, 44, 48, 149, 153, 157, 161, 165];
   var DIAG = ['hostapd', 'hostapd_default', 'lycfg', 'system', 'mtd', 'cmdline', 'mounts', 'meminfo', 'udisk', 'etc_wifi', 'ps', 'env', 'ifconfig', 'private'];

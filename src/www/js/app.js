@@ -6,7 +6,7 @@
     // Firmware update server. The final location is not decided yet; override at
     // runtime with ?test=<url> in the page URL or the "Update server" field on the
     // About page (stored in localStorage key t2c.updateUrl).
-    UPDATE_BASE_URL: 'https://raw.githubusercontent.com/taylor224/carlinkit-t2c-firmware/main/updates',
+    UPDATE_BASE_URL: 'https://raw.githubusercontent.com/taylor224/cpc200-t2c/main/updates',
     // CarPlay session size limits (the adapter's own "HD" preset is 1376x1072).
     MAX_SESSION_AREA: 1376 * 1072,
     MAX_W: 1920,

@@ -1,7 +1,7 @@
 {
   "appver": "26101501.1508.1",
   "tsl": "26101501.5.4",
-  "url": "https://raw.githubusercontent.com/taylor224/carlinkit-t2c-firmware/releases/1508/T2C-tesla-ui-26101501.img",
+  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101501.img",
   "msg": "Tesla UI rebuilt for the 2026.26 browser: viewport fit, H.264 in the browser, EN/ZH/KO/JA. Phone page: reboot, Wi-Fi password, channel, diagnostics.",
-  "release": "https://github.com/taylor224/carlinkit-t2c-firmware/releases/tag/v26101501"
+  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101501"
 }
