@@ -96,3 +96,22 @@ single‑threaded, ~1.4 MB). `js/h264worker.js` feeds complete access units
 textures; BT.601/709 and range come from the SPS VUI. Threads are impossible because
 the adapter's server cannot send COOP/COEP. libwebsockets 3.2 refuses unknown
 extensions, so the module ships as `h264dec.wasm.txt` and is loaded via `wasmBinary`.
+
+## Device log download (`ota/www/cgi-bin/index.cgi?id=logcat`)
+
+The OTA CGI runs `(dmesg && logcat -v threadtime -d) | gzip -c > /tmp/log.gz` and
+streams the file through a small obfuscation (`send_file`, 0x11a00): the 32‑bit
+little‑endian file size is inserted after byte 819, then every 1024‑byte block is
+XORed with the 14‑byte key `liaoyuan.tech\0` (index restarts per block).
+`tools/logcat.py` undoes it. The kernel ring buffer is small and the LED driver logs
+two lines per second, so the boot messages (partition table, `Memory:`) are gone
+after roughly an hour of uptime; fetch the log within ~2 minutes of a power‑cycle.
+`id=host` reports the firmware as `sys.appver` (e.g. `26020416.1508.1`).
+
+The adapter is an Allwinner Tina board (`ARM OpenWrt Linux-4.9.118`, uImage load
+`0x40008000`, SPI NOR only: the kernel carries the `sunxipart` parser and w25q/mx25
+IDs for 16 and 32 MiB parts). The partition table lives in the sunxi MBR on the flash
+itself, so it cannot be read from the update image. The OTA CGI's `id=set&wifi=N`
+only changes the AP channel and restarts `lyhostapd`; nothing on the HTTP side
+reboots the adapter without side effects. Open ports: 80 (OTA), 443 (Tesla UI), 7000
+(AirPlay/CarPlay). No telnet, ssh, or adb.

@@ -19,11 +19,12 @@ echo "== 1. adapter reachable?"
 HOSTJSON=$(curl -s -m 8 "$BASE?id=host") || fail "no answer from $HOST (join the adapter's Wi-Fi first)"
 [ -n "$HOSTJSON" ] || fail "empty answer from $BASE?id=host"
 echo "$HOSTJSON" > "$LOG/host.json"
-echo "   $(echo "$HOSTJSON" | sed -E 's/("uuid"|"imei"|"ICCD"|"iccid"|"wifi"|"mac")\s*:\s*"[^"]*"/\1:"***"/g')"
-SW=$(echo "$HOSTJSON" | sed -nE 's/.*"sw"\s*:\s*"([^"]+)".*/\1/p')
-HW=$(echo "$HOSTJSON" | sed -nE 's/.*"hw"\s*:\s*"([^"]+)".*/\1/p')
-echo "   sw=$SW hw=$HW"
-case "$SW" in *1508*|*.5.*) ;; *) echo "   WARNING: firmware string does not look like the 1508 branch" ;; esac
+echo "   $(echo "$HOSTJSON" | sed -E 's/("uuid"|"imei"|"ICCD"|"iccid"|"wifi"|"mac")[[:space:]]*:[[:space:]]*"[^"]*"/\1:"***"/g')"
+SW=$(echo "$HOSTJSON" | sed -nE 's/.*"appver"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')
+UPD=$(echo "$HOSTJSON" | sed -nE 's/.*"update"[[:space:]]*:[[:space:]]*([0-9]+).*/\1/p')
+echo "   appver=$SW update_state=$UPD"
+case "$SW" in *.1508.*) ;; *) echo "   WARNING: appver does not look like the 1508 branch" ;; esac
+[ "${UPD:-0}" = 0 ] || echo "   WARNING: adapter reports an update in progress (state $UPD)"
 
 echo "== 2. image sanity"
 tools/verify.sh "$IMG" | tail -4
@@ -33,8 +34,14 @@ KERN=$(stat -f %z "$LOG/swu/kernel" 2>/dev/null || stat -c %s "$LOG/swu/kernel")
 echo "   customer=$CUST bytes kernel=$KERN bytes"
 
 echo "== 3. device log (dmesg + logcat) for partition table and memory"
-if curl -s -m 90 "$BASE?id=logcat" -o "$LOG/log.gz" && gunzip -c "$LOG/log.gz" > "$LOG/log.txt" 2>/dev/null; then
+if curl -s -m 90 "$BASE?id=logcat" -o "$LOG/log.bin" && python3 tools/logcat.py "$LOG/log.bin" "$LOG/log.txt"; then
   echo "   log lines: $(wc -l < "$LOG/log.txt")"
+  FIRST_TS=$(grep -oEm1 '^\[ *[0-9]+' "$LOG/log.txt" | tr -d '[ ')
+  echo "   oldest dmesg line is from ${FIRST_TS:-?} s after boot"
+  if [ "${FIRST_TS:-0}" -gt 120 ]; then
+    echo "   WARNING: boot messages have rotated out of the kernel ring buffer;"
+    echo "            power-cycle the adapter and re-run within ~2 minutes to see the partition table"
+  fi
   grep -iE 'mtd|partition|nand|customer|boot[^a-z]|recovery|rootfs|UDISK' "$LOG/log.txt" | grep -viE 'lylink|hostapd|wpa' | head -40 | sed 's/^/   /'
   echo "   memory:"; grep -iE '^Memory:|Memory: [0-9]+K' "$LOG/log.txt" | head -2 | sed 's/^/   /'
   # Try to read the customer partition size from "0x... - 0x... : "customer"" style lines
@@ -43,10 +50,10 @@ import re, sys
 txt = open(sys.argv[1], errors='replace').read()
 cust, kern = int(sys.argv[2]), int(sys.argv[3])
 found = {}
-for m in re.finditer(r'0x([0-9a-f]+)-0x([0-9a-f]+)\s*:\s*"([^"]+)"', txt):
+for m in re.finditer(r'0x([0-9a-f]+)-0x([0-9a-f]+)[[:space:]]*:[[:space:]]*"([^"]+)"', txt):
     a, b, name = int(m.group(1), 16), int(m.group(2), 16), m.group(3)
     found[name] = b - a
-for m in re.finditer(r'\[\s*([0-9a-f]{8,})\s*-\s*([0-9a-f]{8,})\s*\]\s*:?\s*"?([a-zA-Z0-9_]+)', txt):
+for m in re.finditer(r'\[[[:space:]]*([0-9a-f]{8,})[[:space:]]*-[[:space:]]*([0-9a-f]{8,})[[:space:]]*\][[:space:]]*:?[[:space:]]*"?([a-zA-Z0-9_]+)', txt):
     a, b, name = int(m.group(1), 16), int(m.group(2), 16), m.group(3)
     if name not in found and b > a: found[name] = b - a
 if not found:
@@ -95,7 +102,7 @@ while :; do
 done
 sleep 5
 echo "== 7. after"
-curl -s -m 8 "$BASE?id=host" | sed -E 's/("uuid"|"imei"|"ICCD"|"iccid"|"wifi"|"mac")\s*:\s*"[^"]*"/\1:"***"/g'; echo
+curl -s -m 8 "$BASE?id=host" | sed -E 's/("uuid"|"imei"|"ICCD"|"iccid"|"wifi"|"mac")[[:space:]]*:[[:space:]]*"[^"]*"/\1:"***"/g'; echo
 curl -sk -m 8 -o "$LOG/ui-after.html" -w "   Tesla UI -> %{http_code} %{size_download}B\n" -H 'Host: tespush.com' 'https://101.200.208.6/' || true
 grep -q 'h264worker\|cp-canvas' "$LOG/ui-after.html" 2>/dev/null && echo "   new UI is being served" || echo "   WARNING: new UI not detected in https://101.200.208.6/"
 echo "== done. logs in $LOG"
