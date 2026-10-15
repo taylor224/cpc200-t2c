@@ -1,7 +1,7 @@
 {
-  "appver": "26101501.1508.1",
-  "tsl": "26101501.5.4",
-  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101501.img",
-  "msg": "Tesla UI rebuilt for the 2026.26 browser: viewport fit, H.264 in the browser, EN/ZH/KO/JA. Phone page: reboot, Wi-Fi password, channel, diagnostics.",
-  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101501"
+  "appver": "26101502.1508.1",
+  "tsl": "26101502.5.4",
+  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101502.img",
+  "msg": "Firmware image for the Carlinkit T2C (TesPush T2C, branch 1508), built from the official 26090414 image with the Tesla-browser page and the phone-facing page replaced. Device binaries, kernel and the ",
+  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101502"
 }
