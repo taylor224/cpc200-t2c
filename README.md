@@ -63,7 +63,8 @@ overridden with `?test=<url>` in the Tesla page URL or the *Update server* field
 page. `updates/1508/version.json` carries `appver` (compared by the phone page), `tsl`
 (compared by the Tesla page), `url` (a GitHub release asset) and `msg`. Build a release
 with `T2C_VERSION=YYMMDDNN tools/build.sh`, which stamps that date into `app/system.json`
-so the adapter reports the new version afterwards.
+so the adapter reports the new version afterwards. `tools/release.sh YYMMDDNN [NOTES.md]` does the whole
+cycle: build, rewrite `version.json`, commit, push, GitHub release with the image attached.
 
 **Phone page (`http://192.168.3.1/`, `src/ota-www`)**
 - Same design language as the Tesla page, five languages, dark mode follows the phone.
