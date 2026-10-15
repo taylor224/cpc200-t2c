@@ -56,9 +56,14 @@ and a page reload loop on resize. Carlinkit has not shipped a fix.
 **Languages**: English, 简体中文, 繁體中文, 한국어, 日本語 (client‑side; the adapter can
 only persist zh‑CN/zh‑TW/en, so the choice is kept in the browser's storage).
 
-**Firmware update server**: `CONFIG.UPDATE_BASE_URL` in `src/www/js/app.js`. It can be
-overridden at runtime with `?test=<url>` in the page URL or the *Update server* field on the
-About page (the final location is still to be decided).
+**Firmware update server**: both pages read `<base>/<branch>/version.json` (branch `1508`),
+default base `https://raw.githubusercontent.com/taylor224/carlinkit-t2c-firmware/main/updates`
+(`CONFIG.UPDATE_BASE_URL` in `src/www/js/app.js` and `src/ota-www/js/ota.js`). It can be
+overridden with `?test=<url>` in the Tesla page URL or the *Update server* field on either
+page. `updates/1508/version.json` carries `appver` (compared by the phone page), `tsl`
+(compared by the Tesla page), `url` (a GitHub release asset) and `msg`. Build a release
+with `T2C_VERSION=YYMMDDNN tools/build.sh`, which stamps that date into `app/system.json`
+so the adapter reports the new version afterwards.
 
 **Phone page (`http://192.168.3.1/`, `src/ota-www`)**
 - Same design language as the Tesla page, five languages, dark mode follows the phone.

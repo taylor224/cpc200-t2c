@@ -5,6 +5,9 @@
 #   tools/build.sh [BASE_IMG] [OUT_IMG]
 #
 # Defaults: BASE_IMG=test.img (falls back to update.img), OUT_IMG=build/T2C-tesla-ui.img
+# T2C_VERSION=YYMMDDNN replaces the date part of appver/tsl in app/system.json (the
+# version both pages compare against updates/<branch>/version.json); unset keeps the
+# vendor's version.
 # Requires: python3, unsquashfs, mksquashfs (brew install squashfs), cpio not needed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -55,6 +58,20 @@ for n in range(3):
 EOF
 find "$WORK/customer/app/www" -type f -exec chmod 755 {} +   # match original image (all 0755)
 find "$WORK/customer/app/www" -type d -exec chmod 755 {} +
+
+if [ -n "${T2C_VERSION:-}" ]; then
+  echo "== version: $T2C_VERSION (app/system.json)"
+  [[ "$T2C_VERSION" =~ ^[0-9]{8}$ ]] || { echo "T2C_VERSION must be 8 digits (YYMMDDNN)" >&2; exit 1; }
+  python3 - "$WORK/customer/app/system.json" "$T2C_VERSION" <<'EOF'
+import json, re, sys
+p, v = sys.argv[1], sys.argv[2]
+j = json.load(open(p))
+for k in ('appver', 'tsl'):
+    j[k] = re.sub(r'^\d{8}', v, j[k])
+open(p, 'w').write(json.dumps(j, separators=(', ', ' : ')))
+print('   ' + open(p).read())
+EOF
+fi
 
 echo "== overlay src/ota-www -> ota/www (phone page at http://192.168.3.1/)"
 [ -f "$WORK/customer/ota/www/cgi-bin/index.cgi" ] || { echo "stock ota/www/cgi-bin/index.cgi missing" >&2; exit 1; }
