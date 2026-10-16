@@ -84,6 +84,26 @@ and a page reload loop on resize. Carlinkit has not shipped a fix.
   SIMD + OffscreenCanvas + WebGL, MJPEG otherwise; if the decoder cannot keep up (more
   than 40 % of frames dropped for 5 s) it switches back to MJPEG and remembers that for
   a week. Picture / Video force one transport.
+- Wi‑Fi: a wrapper around the adapter's `hostapd` (`src/app/hostapd`) runs the 5 GHz
+  channels 36–48 and 149–161 at 40 MHz with the correct HT40 pairing (stock is 802.11n with
+  `[HT40+]` on every channel, which left the default channel 161 at 20 MHz). Both channel
+  pickers mark those channels as recommended. 802.11ac 80 MHz was tried: hostapd sets it up,
+  but the adapter's Realtek driver drops the VHT elements and runs 40 MHz regardless, so it
+  stays behind an experiment flag (see NOTES). The wrapper falls back to the stock file when
+  hostapd refuses a configuration or no station is associated within five minutes; lylinkui's
+  own hostapd restarts (idle sleep, phone reconnect) re-enter it. Bench-tested, not yet in a car.
+- `lylinkui` no longer piles up the CarPlay video stream while no page is watching (stock
+  parked its IPC thread on a condition variable whenever the stream was active but no page had
+  asked for video, so the phone's frames queued up inside the process until the kernel's OOM
+  killer stopped it and CarPlay reconnected every few minutes — taking the adapter's DNS and the
+  Bluetooth-PAN internet with it; `tools/patch_lylinkui.py` patch 10), and the queue of units
+  waiting for the page is capped at 10: beyond that the adapter drops until the next key frame
+  and asks the phone for one, so a page that falls behind gets a short freeze instead of
+  ever-growing lag (patch 11).
+- The adapter's WebSocket server (`lylinkui`) sends one message per H.264 access unit instead
+  of 8 KB pieces in 4 KB socket writes (`tools/patch_lylinkui.py`; `T2C_WS_PATCH=0` builds
+  without it). Measured with a test client: frame gaps p95 52 ms instead of 125–152 ms with the
+  stock fragmentation, which showed up as stutter.
 - Touch moves are coalesced per animation frame; pointer events with capture.
 - A performance overlay (fps, bandwidth, decode time, dropped frames) can be toggled in
   Display settings.

@@ -282,6 +282,8 @@ a { color: inherit; text-decoration: none; }
 .chlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.2rem, 1fr)); gap: 0.4rem; margin-top: 0.75rem; }
 .chlist button { padding: 0.45rem 0; border-radius: var(--r-ctl); background: var(--control); color: var(--text-2); font-weight: 500; border: 2px solid transparent; }
 .chlist button.on { border-color: var(--blue); color: var(--text); }
+.chlist button small { display: block; font-size: 0.7rem; font-weight: 400; color: var(--text-3); margin-top: 0.1rem; }
+.chlegend { margin: 0.6rem 0 0; font-size: 0.8rem; color: var(--text-3); }
 .toast {
   position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%); z-index: 40; padding: 0.55rem 1rem;
   background: var(--carbon); color: #fff; border-radius: var(--r-ctl); font-size: 0.9rem; max-width: 90vw; text-align: center;

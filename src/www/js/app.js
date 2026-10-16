@@ -490,10 +490,15 @@
 
   /* ---------------------------------------------------------- wi-fi */
 
+  /* 5 GHz channels with a valid HT40 partner: the firmware's hostapd wrapper runs them at 40 MHz
+     (165 has none and stays at 20 MHz; the stock file left the default 161 at 20 MHz too). */
+  var CH40 = [36, 40, 44, 48, 149, 153, 157, 161];
+  function channelWidth(ch) { return ch < 15 ? '' : (CH40.indexOf(ch) >= 0 ? '40 MHz' : '20 MHz'); }
   function channelLabel(ch) {
     if (ch === 0) return t('wifi.band24') + ' · ' + t('wifi.auto');
     if (ch === 255) return t('wifi.band5') + ' · ' + t('wifi.auto');
-    return (ch < 15 ? t('wifi.band24') : t('wifi.band5')) + ' · ' + ch;
+    var w = channelWidth(ch);
+    return (ch < 15 ? t('wifi.band24') : t('wifi.band5')) + ' · ' + ch + (w ? ' · ' + w : '');
   }
 
   function channelDialog() {
@@ -503,16 +508,21 @@
     var content = document.createElement('div');
     var seg = document.createElement('div'); seg.className = 'seg';
     var list = document.createElement('div'); list.className = 'chlist';
+    var legend = document.createElement('p'); legend.className = 'chlegend';
     function renderList() {
       list.innerHTML = '';
       var chans = band === 24 ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] : [255, 36, 40, 44, 48, 149, 153, 157, 161, 165];
       chans.forEach(function (c) {
         var b = document.createElement('button');
-        b.textContent = (c === 0 || c === 255) ? t('wifi.auto') : String(c);
+        var rec = CH40.indexOf(c) >= 0;
+        b.textContent = (c === 0 || c === 255) ? t('wifi.auto') : (rec ? '\u2605 ' : '') + c;
+        var w = (c === 0 || c === 255) ? '' : channelWidth(c);
+        if (w) { var sm = document.createElement('small'); sm.textContent = w; b.appendChild(sm); }
         b.classList.toggle('on', c === chosen);
         b.onclick = function () { chosen = c; renderList(); };
         list.appendChild(b);
       });
+      legend.textContent = band === 5 ? '\u2605 ' + t('wifi.rec40') : '';
     }
     [[24, 'wifi.band24'], [5, 'wifi.band5']].forEach(function (pair) {
       var b = document.createElement('button'); b.textContent = t(pair[1]); b.classList.toggle('on', band === pair[0]);
@@ -520,7 +530,7 @@
       seg.appendChild(b);
     });
     renderList();
-    content.appendChild(seg); content.appendChild(list);
+    content.appendChild(seg); content.appendChild(list); content.appendChild(legend);
     dialog({
       title: t('wifi.channel'), content: content,
       buttons: [{ label: t('dlg.cancel') }, { label: t('dlg.save'), primary: true, onClick: function () {

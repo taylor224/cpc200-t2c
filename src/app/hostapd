@@ -1,0 +1,178 @@
+#!/bin/sh
+# T2C firmware: wrapper around the rootfs hostapd. lyLink.sh puts $WORKDIR first in PATH and
+# lylinkui starts the access point with `hostapd -B /tmp/hostapd.conf`, so this script runs
+# instead of the daemon and then starts the real one.
+#
+# The stock /tmp/hostapd.conf is 802.11n only and carries `[HT40+]` whatever the channel; that
+# is not a valid 40 MHz pairing for 40/48/153/161 (the AP then runs at 20 MHz). This script
+# writes /tmp/hostapd-t2c.conf with the right HT40 side for 36-48 and 149-161. Order of attempts:
+# 40 MHz, stock file; with /mnt/UDISK/t2c_vht80 present an 802.11ac 80 MHz file is tried first
+# (hostapd accepts it and asks the driver for 80 MHz, but the rtl8821cs driver drops the VHT
+# elements and runs HT40, so it is an experiment flag only). An attempt is dropped when hostapd refuses the file or dies during start-up (the HT40
+# scan result is checked after -B returned), and when no station is associated within 5
+# minutes the stock file is restored and a failure is counted in /mnt/UDISK/t2c_vht_fail; two
+# failures in a row keep the stock file until a station is seen again. Touch
+# /mnt/UDISK/t2c_vht_off to disable all of this. Log: /tmp/t2c_hostapd.log. With
+# /mnt/UDISK/t2c_hostapd_debug present hostapd runs in the foreground with -t -dd and its output
+# lands in /tmp/hostapd-t2c.log (the rootfs binary has no -f); /mnt/UDISK/t2c_country (two
+# letters) is written to the driver's country_code before each launch; /mnt/UDISK/t2c_hostapd_extra
+# (key=value lines, `;` works as a separator) is appended to the 80/40 MHz files, replacing
+# generated keys of the same name (experiments, e.g. country_code=KR;ieee80211d=1).
+#
+# lylinkui itself restarts hostapd: 120 s after the CarPlay video stops with no car display
+# attached it runs `killall hostapd` ("ly_misc_thread sleeping"), sleeps 60 s and launches it
+# again ("wake up"); the phone connecting over Bluetooth while the AP is down does the same.
+# Every relaunch re-enters this script, so "a station is associated" is read from the driver's
+# station table at check time, never from "new since we started".
+CONF=/tmp/hostapd.conf
+MINE=/tmp/hostapd-t2c.conf
+LOG=/tmp/t2c_hostapd.log
+HLOG=/tmp/hostapd-t2c.log
+WD=/tmp/t2c_hostapd.wd
+FAIL=/mnt/UDISK/t2c_vht_fail
+STA=/proc/net/rtl8821cs/wlan0/all_sta_info
+DEBUGFLAG=/mnt/UDISK/t2c_hostapd_debug    # exists: run hostapd in the foreground with -t -dd, output in $HLOG
+COUNTRY=/mnt/UDISK/t2c_country            # two letters: written to the driver's country_code before each launch
+CCPROC=/proc/net/rtl8821cs/wlan0/country_code
+VHT80FLAG=/mnt/UDISK/t2c_vht80            # exists: try 802.11ac 80 MHz first (the driver ignores VHT in AP mode as of 2026-10)
+EXTRA=/mnt/UDISK/t2c_hostapd_extra        # experiments: key=value lines (or ;-separated) appended to the 80/40 MHz files
+HERE=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
+
+log() { echo "$(date '+%H:%M:%S') $*" >> "$LOG" 2>/dev/null; }
+
+# the real daemon: first `hostapd` on PATH that is not this script
+REAL=$(IFS=:; for d in $PATH; do [ "$d" != "$HERE" ] && [ -x "$d/hostapd" ] && [ ! -d "$d/hostapd" ] && { echo "$d/hostapd"; break; }; done)
+[ -n "$REAL" ] || REAL=/usr/sbin/hostapd
+
+conf_for() {   # $1 = 80 | 40 | stock -> path of the file to start with
+	case "$1" in stock) echo "$CONF"; return 0 ;; esac
+	extra=$(tr ';' '\n' < "$EXTRA" 2>/dev/null | grep '^[a-z0-9_]*=' )
+	{
+		grep -v -e '^ht_capab=' -e '^ieee80211ac=' -e '^vht_' "$CONF"
+		echo "ht_capab=[SHORT-GI-20][SHORT-GI-40]$HT"
+		[ "$1" = 80 ] && printf 'ieee80211ac=1\nvht_oper_chwidth=1\nvht_oper_centr_freq_seg0_idx=%s\nvht_capab=[SHORT-GI-80]\n' "$SEG"
+	} | {
+		if [ -n "$extra" ]; then
+			# an extra key replaces the generated line of the same name
+			keys=$(printf '%s\n' "$extra" | sed 's/=.*//' | tr '\n' '|' | sed 's/|$//')
+			grep -Ev "^($keys)="; printf '%s\n' "$extra"
+		else cat; fi
+	} > "$MINE"
+	echo "$MINE"
+}
+
+# PID of the daemon started with config $1. Never `killall hostapd`/`pidof hostapd` here: busybox
+# matches the comm name, and the comm of a #!/bin/sh script is its basename, i.e. the monitor
+# itself is called "hostapd" and would be killed before it can start the stock daemon.
+daemon_pid() { ps 2>/dev/null | grep -v grep | grep "hostapd .*$1" | awk '{print $1}' | head -n 1; }
+alive() { [ -n "$(daemon_pid "$1")" ]; }
+
+# start the daemon with config $1; 0 when hostapd accepted the file. The rootfs hostapd has no -f
+# (CONFIG_DEBUG_FILE), so debugging means running it in the foreground, output redirected.
+start_daemon() {
+	if [ -f "$DEBUGFLAG" ]; then
+		"$REAL" -t -dd "$1" > "$HLOG" 2>&1 < /dev/null &
+		sleep 1; alive "$1"
+	else
+		"$REAL" -B "$1" >> "$LOG" 2>&1
+	fi
+}
+
+set_country() {
+	cc=$(head -c 2 "$COUNTRY" 2>/dev/null); case "$cc" in [A-Z][A-Z]) ;; *) return 0 ;; esac
+	if echo "$cc" > "$CCPROC" 2>/dev/null; then log "country_code $cc -> $(cat "$CCPROC" 2>/dev/null)"; else log "country_code $cc: write failed"; fi
+}
+
+launch() {   # $1 = mode; 0 when hostapd accepted the file
+	c=$(conf_for "$1")
+	log "start mode=$1 ch=$CH conf=$c"
+	start_daemon "$c"
+}
+
+# a station is associated right now: an entry with aid >= 1 in the driver's table (fallback:
+# a complete ARP neighbour on wlan0)
+client_seen() {
+	if [ -r "$STA" ]; then
+		[ "$(grep -c 'aid=[1-9]' "$STA" 2>/dev/null)" -gt 0 ] 2>/dev/null
+	else
+		[ "$(awk '$6=="wlan0" && $3=="0x2"' /proc/net/arp 2>/dev/null | wc -l)" -gt 0 ] 2>/dev/null
+	fi
+}
+
+monitor() {   # background: $1 = modes still to try (first = running), $2 = channel, $3 = HT side, $4 = seg0, $5 = fail count
+	modes=$1; CH=$2; HT=$3; SEG=$4; fails=$5
+	while :; do
+		mode=${modes%% *}; rest=${modes#* }; [ "$rest" = "$modes" ] && rest=''
+		c=$(conf_for "$mode")
+		# 1. survive start-up (the HT40 scan verdict and driver refusals come after -B returned)
+		i=0
+		while [ $i -lt 12 ]; do
+			sleep 1; i=$((i + 1))
+			if ! alive "$c"; then
+				log "hostapd died during start-up, mode=$mode"
+				break
+			fi
+		done
+		if [ $i -lt 12 ]; then
+			[ -n "$rest" ] || { log "nothing left to try"; return; }
+			modes=$rest; mode=${modes%% *}
+			launch "$mode" || { log "hostapd refused mode=$mode"; sleep 1; start_daemon "$CONF"; return; }
+			continue
+		fi
+		# 2. the stock file needs no confirmation; it only resets the failure count when a station shows up
+		if [ "$mode" = stock ]; then
+			i=0; while [ $i -lt 60 ]; do sleep 10; i=$((i + 1)); client_seen && { echo 0 > "$FAIL"; log "client seen on stock"; return; }; done
+			return
+		fi
+		# 3. wait for a station
+		i=0
+		while [ $i -lt 30 ]; do
+			sleep 10; i=$((i + 1))
+			if client_seen; then echo 0 > "$FAIL"; log "client seen, mode=$mode confirmed"; return; fi
+			alive "$c" || { log "hostapd gone while waiting, mode=$mode"; return; }
+		done
+		fails=$((fails + 1)); echo "$fails" > "$FAIL"
+		log "no client in 5 min on mode=$mode, back to the stock file (failures: $fails)"
+		p=$(daemon_pid "$c"); [ -n "$p" ] && kill "$p" 2>/dev/null; sleep 1
+		start_daemon "$CONF"
+		return
+	done
+}
+
+if [ "$1" = --monitor ]; then shift; monitor "$@"; exit 0; fi
+
+# anything but lylinkui's "hostapd -B /tmp/hostapd.conf" goes straight through
+case " $* " in *" -B $CONF "*) ;; *) exec "$REAL" "$@" ;; esac
+[ -r "$CONF" ] && [ ! -f /mnt/UDISK/t2c_vht_off ] || exec "$REAL" "$@"
+
+CH=$(sed -n 's/^channel=\([0-9]*\).*/\1/p' "$CONF" | head -n 1)
+case "$CH" in
+	36|44|149|157) HT='[HT40+]' ;;
+	40|48|153|161) HT='[HT40-]' ;;
+	*) exec "$REAL" "$@" ;;      # 2.4 GHz, 165, anything else: stock behaviour
+esac
+case "$CH" in 36|40|44|48) SEG=42 ;; *) SEG=155 ;; esac
+
+# USB device mode for bench work: /mnt/UDISK/t2c_adb present -> Allwinner's setusbconfig puts the
+# port into adb gadget mode (the stock boot sets "none"); harmless when the tool or adbd is missing.
+if [ -f /mnt/UDISK/t2c_adb ] && [ -x "$HERE/t2c_usb.sh" ]; then
+	( sleep 5; "$HERE/t2c_usb.sh" adb ) < /dev/null > /dev/null 2>&1 &
+fi
+FAILS=$(cat "$FAIL" 2>/dev/null); case "$FAILS" in ''|*[!0-9]*) FAILS=0 ;; esac
+MODES='40 stock'
+[ -f "$VHT80FLAG" ] && MODES='80 40 stock'
+[ "$FAILS" -ge 2 ] && MODES='stock'
+set_country
+
+[ -f "$WD" ] && kill "$(cat "$WD")" 2>/dev/null; rm -f "$WD"
+
+while :; do
+	mode=${MODES%% *}
+	if launch "$mode"; then break; fi
+	log "hostapd refused mode=$mode"
+	rest=${MODES#* }; [ "$rest" = "$MODES" ] && exit 1
+	MODES=$rest
+done
+"$HERE/hostapd" --monitor "$MODES" "$CH" "$HT" "$SEG" "$FAILS" < /dev/null > /dev/null 2>&1 &
+echo $! > "$WD"
+exit 0

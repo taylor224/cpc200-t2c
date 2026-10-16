@@ -53,6 +53,22 @@ csq, bt, pong`), 1 init JSON (all settings, `link`, `phone`, `SW`, `LY`, `HW`, �
 list changed, 3 `{link, phone}`, 4 firmware status `{val, pong}`, 5 reload, 100 complete
 H.264 access unit, 101/102/103 first/middle/last fragment, 300 QR text.
 
+**Video write path** (`func_14150` → `callback_tsl` 0x16c6c): the IPC thread copies each access
+unit into a malloc'd message and hands it over through a one‑entry queue (`g+0x260/0x264`),
+waking the service thread with `lws_cancel_service_pt`; while the queue holds a message the
+producer waits on a condvar, so at most one unit is in flight and one waiting. Stock
+`LWS_CALLBACK_SERVER_WRITEABLE` sends the unit in 8168‑byte pieces (type 101/102/103, 100 only
+when the whole unit fits), one `lws_write` + `lws_callback_on_writable` + poll() round each,
+and `lws_issue_raw` caps a single send() at `pt_serv_buf_size` (4096: lylinkui sets neither
+that nor the protocol's `tx_packet_size`), so even one piece takes two writes. A 25–40 KB
+unit (6–10 Mbit/s at 30 fps) therefore cost ~10 send() calls, ~10 poll rounds and ~10 TLS
+records on the single core, with the next unit blocked behind them. `tools/patch_lylinkui.py`
+(patch 7, since 26101510) raises the piece to 65280 bytes, uses type 100 up to 65508 bytes
+and sets `tsl.tx_packet_size = 65536`, so a unit normally goes out in one write; the
+WebSocket header stays in its 4‑byte form and lws' buflist handles a partial TLS write
+(server SSL has `SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER`, retry uses the same length). Not
+yet verified on the adapter.
+
 HTTP: `GET /video.jpg` = `multipart/x-mixed-replace; boundary=CarPlayVideo` (picture
 mode only; a single‑slot queue with back‑pressure to the encoder thread), `GET /tsl/bt`
 (JSON list of `<flag><12‑hex mac><name>`), `POST /tsl/fw` (image upload), `GET
@@ -112,9 +128,20 @@ by the web UI: ≤ 1376×1072 pixels of area, 16‑aligned, mm ≤ 255.
 
 ## Audio
 
-Not on the web path at all. `lylinkui` handles `LYLINK_AUDIO_START/STOP` and
-`LYLINK_RECORD_*` by routing PCM to the Goodix Bluetooth chip (A2DP to the car, HFP
-SCO from the car's microphone). `/mic_test.pcm` records a sample from that path.
+Not on the web path at all, and not on the CarPlay (Wi‑Fi) path either: the Tesla build of
+`libcarplay.so` disables the session's audio output (`CPClientDisableAudioOutput … may be for
+Tesla`, `not copy the audio format, for Tesla` in the device log; lylinkui's own audio
+output stays `not init`), because the car accepts audio only over Bluetooth. Music and calls
+are bridged by the Goodix module (`gocsdk`/`libGbtsTask`, CSR‑Synergy based, firmware
+`GBTSD4.95G4.72`): A2DP sink + HFP hands‑free towards the iPhone, A2DP source + HFP AG towards
+the car, on one Classic radio that also carries the PAN (the car's internet). The A2DP stack
+is SBC only (bitpool negotiated, `filter_sbc: … remoteMaxBitpool`; no AAC/aptX strings), so
+the best case is SBC at full bitpool, twice. Nothing in `app/` changes codec or bitpool;
+`/mnt/UDISK/bt_conf.ini` (131 bytes, `t2c.cgi?a=cat&f=bt_conf`) and `/etc/GocPcmConf.ini` are
+the only configuration files it reads. `LYLINK_AUDIO_START/STOP` and `LYLINK_RECORD_*`
+handlers exist in lylinkui for other products; `/mic_test.pcm` records from that path.
+Keep the AP on 5 GHz: channel 6 (allowed by `t2c.cgi?a=channel`) would share the band with
+the Bluetooth audio.
 
 ## H.264 in the browser
 
@@ -139,6 +166,226 @@ WebGL context is allowed to be lost and restored (`webglcontextlost` + `preventD
 it does not come back in 10 s the app falls back to MJPEG for an hour. Threads are impossible because
 the adapter's server cannot send COOP/COEP. libwebsockets 3.2 refuses unknown
 extensions, so the module ships as `h264dec.wasm.txt` and is loaded via `wasmBinary`.
+
+## Wi‑Fi link (RTL8821CS)
+
+The adapter's radio is a Realtek RTL8821CS (SDIO, 1T1R 802.11a/b/g/n/ac, 20/40/80 MHz, VHT
+MCS0–9 → 433 Mbit/s PHY at most). `modules/8821cs.ko` is loaded with `rtw_vht_enable=2` and
+its compiled‑in defaults (read from `__param` relocations) already allow 80 MHz on 5 GHz
+(`rtw_bw_mode`/`rtw_tx_bw_mode` 0x21, `rtw_vht_rx_mcs_map` 0xaaaa, `rtw_channel_plan` 0xff =
+efuse). What limits the link is `/tmp/hostapd.conf`, which `save_hostapd_conf` (0x14ef0)
+rewrites from the read‑only `/etc/wifi/hostapd.conf` (WIFIPATH is only a fallback when that
+file is missing): `hw_mode=a`, `ieee80211n=1`, `ht_capab=[SHORT-GI-20][SHORT-GI-40][HT40+]`,
+no `ieee80211ac`/`vht_oper_chwidth`, so the AP is 802.11n only. Worse, the `ht_capab` line is
+copied unchanged except for channels 8–14, 48 and ≥162 (where lylinkui drops it), and
+`HT40+` is not a valid pairing for the default channel 161 (its 40 MHz partner is 157, i.e.
+`HT40-`), so the stock AP most likely runs at 20 MHz there (72 Mbit/s PHY; unverified — check
+the channel width from a client, e.g. `wdutil info` on a Mac). Channels 36/44/149/157 are
+valid `HT40+` primaries.
+
+Since 26101510 `app/hostapd` (`src/app/hostapd`) wraps the daemon: lylinkui starts it with
+`system("hostapd -B /tmp/hostapd.conf")` and `lyLink.sh` puts `/tmp/bin:$WORKDIR` first in
+PATH, so the script runs instead and starts the first other `hostapd` on PATH. For channels
+36–48 and 149–161 it writes `/tmp/hostapd-t2c.conf` with the right HT40 side plus
+`ieee80211ac=1`, `vht_oper_chwidth=1`, `vht_oper_centr_freq_seg0_idx` 42/155 and
+`vht_capab=[SHORT-GI-80]`; attempts go 80 MHz → 40 MHz → stock file. An attempt is dropped
+when hostapd refuses the file or dies within 12 s (the HT40 scan verdict comes after `-B`
+returned), and a background monitor restores the stock file when no client has shown up
+within 5 minutes (a DHCP lease newer than the start, or a new wlan0 ARP neighbour), counting
+a failure in `/mnt/UDISK/t2c_vht_fail`; two failures in a row keep the stock file until a
+client is seen again. `/mnt/UDISK/t2c_vht_off` disables it; log in `/tmp/t2c_hostapd.log`.
+The phone page's diagnostics expose the pieces: `t2c.cgi?a=cat&f=t2c_hostapd` (wrapper log with
+hostapd's own messages), `hostapd_t2c` (the file the running daemon got), `vht_fail`,
+`hostapd_caps` (`hostapd -v` and whether the rootfs binary contains the 11ac config keywords),
+`wlan_ls` and `wlan_<name>` for `/proc/net/rtl8821cs/wlan0/<name>` (`all_sta_info`, `ap_info`,
+`trx_info`, `rx_signal`, `tx_stat`: per-station rate, bandwidth, RSSI, retries), `hostapd_log`,
+`wlan_params`.
+The monitor stops a daemon by the PID taken from `ps`, never with `killall`/`pidof`: busybox
+matches the comm name, and the comm of a `#!/bin/sh` script is the script's basename, so the
+monitor itself is a process called `hostapd`. 26101511 had `killall hostapd` in the no‑client
+path and killed itself before starting the stock daemon; on the bench that left the adapter
+without Wi‑Fi until lylinkui relaunched hostapd hours later. Fixed in 26101512.
+
+**lylinkui restarts hostapd on its own.** Its `ly_misc_thread` counts down 120 s after the
+CarPlay video stops with no car display attached (`count down 112 … 16`), then runs
+`system("killall hostapd")` (logged as `sleeping`), sleeps 60 s and launches hostapd again
+(`wake up`); the phone connecting over Bluetooth while the AP is down (`carplay BT OK, checking
+AP` → `ap still nok`) does the same. On the bench without the Tesla page the AP therefore cycles
+~3 min on / 1 min off (the Mac roams away each time), and every relaunch re-enters the wrapper.
+26101512's "client seen" test (a DHCP lease newer than the start, or a new ARP neighbour) could
+not see stations that were already there, so each relaunch ended in "no client in 5 min" and a
+failure count. Since 26101513 the test reads the driver's station table
+(`/proc/net/rtl8821cs/wlan0/all_sta_info`, an entry with `aid=1..8`; complete ARP neighbours as
+fallback) at check time. The rootfs hostapd has no `-f`; with `/mnt/UDISK/t2c_hostapd_debug`
+present the wrapper runs it in the foreground with `-t -dd` and its output lands in
+`/tmp/hostapd-t2c.log` (truncated per launch; `-dd` is chatty, so opt‑in only).
+`/mnt/UDISK/t2c_country` (two letters) is written to the driver's `country_code` before each
+launch. `t2c.cgi?a=flag&f={hostapd_debug,country,vht_off}&v=VALUE` creates these files (empty
+value deletes), `a=cat&f=flags` lists them.
+
+**What the 80 MHz attempt really gives (measured 2026‑10‑16).** The rootfs hostapd is
+`v2.7-devel_rtw` (Realtek fork, 2020) and does everything right: with `ieee80211ac=1` it logs
+`hw vht capab: 0x3c00122`, `Set freq 5805 (ht_enabled=1, vht_enabled=1, bandwidth=80 MHz,
+cf1=5775)` and its beacon tail carries VHT Capabilities (191) and VHT Operation (192, width 1,
+seg0 155). The rtl8821cs driver (v5.9.2_36984.20200615, module stripped) then brings the BSS up
+as `wireless_mode=0x14(A/N)`, `cur_bwmode=1(40MHz)`, `vht_en=0` (`ap_info`) and the on‑air beacon
+has no VHT element (a Mac associates as 802.11n/40 MHz). The chip reports `bw_cap: 20M 40M 80M`,
+`proto_cap: b g n ac`; module parameters as loaded: `rtw_wireless_mode` 0x5F (includes AC),
+`rtw_vht_enable` 1, `rtw_bw_mode` 0x21, `rtw_channel_plan` 255 (auto → `chplan:0x7F`,
+`PLS regd:(null)`, `country_code unspecified`). Tried and rejected, each with a hostapd restart:
+`country_code=KR` + `ieee80211d=1` in the file (hostapd goes through COUNTRY_UPDATE, the kernel
+stays at country 00, plan unchanged), writing `KR` to `/proc/net/rtl8821cs/wlan0/country_code`
+(reads back `unspecified`), `vht_capab=` empty, `vht_oper_chwidth=0` (hostapd refuses it with
+seg0 set). `insmod … rtw_country_code=KR` via lyLoadModule.sh never reached the driver
+(`/sys/module/8821cs/parameters/rtw_country_code` stayed 0xffff; either `/mnt/UDISK` is not
+mounted when lyLoadModule.sh runs or the copy under `$WORKDIR=/mnt/UDISK/app` is the one that
+runs) — inconclusive, not pursued further. The most likely gate is the driver's
+`rtw_check_beacon_data` dropping the VHT elements when the regulatory entry is missing
+(`RFCTL_REG_EN_11AC`), which no runtime knob reaches. Conclusion: **HT40 is the ceiling on this
+adapter** (1x1, short GI → 150 Mbit/s PHY, up from 72 at 20 MHz). Since 26101516 the wrapper's
+default order is 40 MHz → stock; `/mnt/UDISK/t2c_vht80` puts the 80 MHz file first again for
+future experiments, and both channel pickers label 36–48/149–161 "40 MHz · recommended".
+Experiment hooks kept: `t2c.cgi?a=cat&f=hostapd_log` (with `t2c_hostapd_debug`), `wlan_params`,
+`a=wlanw&f=K&v=V` (`log_level`, `wlan0/country_code`, `wlan0/change_bss_chbw`),
+`a=flag&f=N&v=V` (`hostapd_debug`, `country`, `vht_off`, `vht80`, `hostapd_extra` = extra
+`key=value` lines for the 80/40 files), `a=hostapd_restart`.
+
+**lylinkui leaks the video stream when no page is attached — fixed (patch 8, 26101520).** The
+producer that hands each H.264 access unit from the IPC thread to the WebSocket thread
+(`func_14150`: `malloc(len+152)`, `memcpy`, lock) checks `g+0x268` (a page is attached) and
+`g+0x50` (video wanted). With a page and video on it parks the unit in the single slot `g+0x264`
+(and blocks on the condvar while the slot is busy, so a slow page only stalls the IPC side); with
+a page but video off it frees the unit; **with no page it unlocked and returned without freeing**
+(`beq 0x141e8`). The phone keeps streaming for a while after the page goes (and after our
+`LYLINK_PHONE_DISCONN`), so lylinkui grew at the video bit rate (0.4–0.5 MB/s) until the kernel's
+OOM killer took it (`Out of memory: Kill process (tesla) … anon-rss:95108kB`), the supervisor
+restarted it, the car page showed "waiting for iPhone" and the phone reconnected — on the bench
+every 4–5 minutes, in the car whenever the Tesla page drops while CarPlay is up. Patch 8 turns the
+branch into `beq 0x141bc` (the free path; the loop then returns at once because no page is
+attached). Diagnosed with `t2c.cgi?a=top` (RSS 88.8 → 92.9 MB in 8 s) and dmesg.
+
+**The leak, finally located (patches 8/9 were aimed at the wrong function).** `func_14150` is an
+alternative hand-off that the dispatcher only installs as a pointer (`g+0x268`); the live path for
+video data (callback case 14 in `func_14250`) is `0x1327c` (plain access unit) / `0x131dc` (unit
+with the cached SPS/PPS prepended): `malloc(len+36)`, `memcpy`, then `bl 0x1317c`, the enqueue.
+`0x1317c` reads `g+0x4c` (the page's connection) and **returns without freeing the node when it is
+0**; otherwise it appends the node to a linked list (head `g+0x260`, tail `g+0x264`) that the
+WebSocket thread drains one node per `LWS_CALLBACK_SERVER_WRITEABLE` (free at `0x18fc8`). The
+list has no bound, so a page that is slower than the stream makes memory and latency grow
+together — that is the "lag" mechanism, see below. Patch 10 (26101523) appends a 32‑byte
+wrapper after the DNS names in the r-x segment padding and points both `bl 0x1317c` at it: it
+checks `g+0x4c` first and tail-calls `free(node)` instead when no page is attached. **Verified on
+the adapter (26101525):** with the phone streaming ~1 Mbit/s and no page, lylinkui stayed at
+9156 kB VSZ / 95.4 MB available for two minutes (before: +0.3–0.5 MB/s, OOM kill every 4–5 min).
+
+**Bounded queue (patch 11, 26101528).** The same wrapper now also bounds the list: before
+enqueuing it walks the list from `g+0x260`; with 10 units already waiting (~330 ms at 30 fps) it
+frees the new unit and enters *drop mode*: every following unit is freed until the next IDR
+(the caller `0x131dc` is the IDR path, `0x1327c` the P path — two entry points tell them apart),
+and a new zeroed word (`FLAG` at `DATA_VA + 0x89c`, the rw PT_LOAD's memsz grew by 4) is set to
+1. The lws thread's writeable callback (its final `bl lws_callback_on_writable` at `0x18cbc` goes
+through a hook) turns 1 into 2 and asks the phone for a key frame the way the page's cmd 8 does
+(`lylinkapi_key(0x600, 0)` + `(0x600, 1)`), outside the producer's lock; the producer re-arms the
+request every 64 dropped units. Two lessons from the bench: hooking the *end of the WRITEABLE
+callback* (`0x18cbc`, 26101528) silently broke the page handshake (no link JSON, no video), while
+wrapping the main loop's `lws_service()` call (`0x1a868`, 26101530) works — the request is now
+issued there; and on the adapter's own menu stream (no phone session) the key request makes
+lylinkapp stop the video, so the bound only applies while `g+0x30c` (phone attached, the
+`phone` field of the link JSON) is set (26101531). **Real session check (26101531, Chrome page on the
+Mac, iPhone CarPlay at 1616×912, phone uplink peaks ~9 Mbit/s):** lylinkui 9.4 → 10.0 MB VSZ in the
+first 30 s, then flat for 3 minutes; 95 MB available throughout; one key-frame request in total (the
+page's own at session start — the bound never had to drop, the page kept up); no OOM; CPU ~75 %
+idle (lylinkui 1.8 %, Realtek threads ~4 %). Effect: a page that falls behind gets at most ~330 ms of backlog,
+then a short freeze until the IDR, instead of ever-growing latency (and memory).
+
+**Patch 8 alone did not stop the growth** (26101520: still +0.3 MB/s with the phone streaming and no
+page), which re-reads as follows: `g+0x268` is "stream active" (set/cleared by the LYLINK_VIDEO
+callbacks in `func_14250`), `g+0x50` is "a page asked for video" (cmd VIDEO). Stream active + no
+page → the unit is freed and the IPC thread then **blocks on the condvar** until a page asks or
+the stream stops; the IPC layer keeps queueing the phone's units inside the process meanwhile.
+Patch 9 (26101521) turns that `bne` into a NOP so the thread frees the unit and returns at once
+(frames are simply dropped while nobody watches; the page requests a key frame when it attaches).
+While lylinkui was being OOM-killed every few minutes, the adapter's DNS (`dnsd` runs inside
+lylinkui) and the PAN forwarding set-up (`btpan_ipForward`, also lylinkui) died with it, which is
+why a Mac on the hotspot saw "no internet" although the Bluetooth PAN to the phone was up.
+`t2c.cgi?a=cat&f=maps` summarises lylinkui's writable mappings (heap vs anonymous) for this.
+
+**Where the time goes (profiled 2026‑10‑16 with `t2c.cgi?a=top`, phone video relayed to a fast
+client at ~32 fps, ~1.8 Mbit/s):** the core is ~85 % idle. lylinkui 6.2–6.4 % (its lws/TLS thread
+5.5 %), lylinkapp 2 % (the `AirPlayScreenRe` thread, real-time priority −61), Realtek driver
+`RTW_RECV_THREAD` 2.6 % + `ksdioirqd/mmc0` 1.6 % + `RTWHALXT` 1 % + `RTW_XMIT_THREAD` 0.7 %, gocsdk
+0.4 % (3–6 % only while Bluetooth is busy), everything else ~0. SDIO interrupts ~1 200/s. Memory
+95 MB available without the leak. So CPU is not the latency source; the write path is: with the
+stock 8 KB fragmentation the frame gaps at the client were p50 5–24 ms but **p95 125–152 ms, max
+160–222 ms** (frames arrive in clumps, i.e. stutter), whereas with the one-message-per-unit patch
+they were p50 25 ms / p95 52 ms / max 55 ms. That patch is therefore back on by default from
+26101526 (its suspected leak was the no-page leak above, which starts at boot because the phone
+begins streaming before any page attaches).
+
+**26101526 verified on the bench:** phone sending ~1 Mbit/s with no page → lylinkui 9088 kB VSZ /
+95.3 MB available flat for 90 s; a fast test client attached → still flat, one message per unit,
+gaps p50 25 ms / p95 52–66 ms. But the adapter's own menu stream (what a page sees while no CarPlay
+session is up: constant ~5.5 KB units at 32 fps from the adapter's H.264 encoder) showed sporadic
+stalls of 0.26–2.3 s (7–35 per minute, varying run to run) with the core 90 % idle — not CPU; the
+encoder/renderer or the Wi‑Fi link to the client are the candidates. Whether the relayed CarPlay
+stream stalls the same way in the car is unmeasured: the page's stats overlay has no gap/jitter
+metric yet (worth adding: max gap and count of gaps > 150 ms per second), and on the bench the
+phone did not re-enter a session on request (`/tsl/bt` lists it, type‑4 connect sent, `phone`
+stayed false).
+
+**Write‑path patch withdrawn (2026‑10‑16 evening, re-enabled the same night — see above).** With the patch (26101510–26101518) and a real
+CarPlay session (1552×944, ~2.5 Mbit/s) lylinkui's RSS grew at about the video bit rate
+(88.8 → 92.9 MB in 8 s at 280 s uptime; `t2c.cgi?a=top` shows RSS) until
+`Out of memory: Kill process (tesla) … anon-rss:95108kB` at 296 s; the supervisor restarted it
+(`parse_exit … signal number = 9`), the car page showed "waiting for iPhone" and the session came
+back, every few minutes. No OOM ever appeared in the 26101509 logs, so the leak is in the
+patched path (most likely the type‑100 single‑message branch keeping each access unit, which
+stock only used for units ≤ 8164 bytes; `callback_tsl|1735 … data->length:56594 while len:4096`
+lines at session start show the large-message write being retried). `tools/patch_lylinkui.py`
+keeps the patch behind `T2C_WS_PATCH=1` for further work; the shipped image uses the stock
+fragmentation again (patched sha fd72e66a… with patch 8). Whether patch 7 leaked on its own or
+only through the no-page path above is not settled (the OOM with the Mac page attached happened
+with patch 7 and a page that was consuming at the stream rate).
+
+**Write‑path patch verified on the adapter (2026‑10‑16, 26101513):** a TLS WebSocket test client
+(hand‑rolled framing; Node's built‑in WebSocket rejects lws 3.2's handshake) saw exactly one
+message per access unit (msgs/AU 1.00, largest message 64469 bytes, no drops) at ~33 fps of the
+adapter's menu, 7–10 KB per AU, frame gaps p50 25 ms / p95 52 ms.
+Channels 6 and 165 and anything else go through untouched. Whether the rootfs hostapd is
+built with 11ac support, and whether the Realtek AP really runs 80 MHz, is still to be
+verified on the adapter (the fallback exists for exactly that). The logic was exercised
+offline with fake daemons (refusal, death after start, no client, failure count, pass‑through).
+Both pages mark 36–48/149–161 as "80 MHz · recommended" and 165 as 20 MHz. The driver
+exposes per‑station diagnostics under
+`/proc/net/rtl8821cs/wlan0/` (`all_sta_info`, `trx_info`, `rx_signal`, `tx_stat`,
+`rx_stat`, `survey_info`, `rate_ctl`, `bw_ctl`): RSSI, current tx rate/bandwidth and retry
+ratio — the data that tells whether the radio or the adapter pipeline is the bottleneck.
+The adapter's load of 2–2.8 with a modest CPU busy share means tasks are waiting in
+uninterruptible sleep (the SDIO driver threads), not computing.
+
+## USB device mode (adb) for bench work
+
+The adapter's USB port is dual-role: `/sys/devices/platform/soc/usbc0/otg_role` is `usb_host` at
+boot (lyLink.sh runs `/bin/setusbconfig none`), there is a device controller
+(`/sys/class/udc/5100000.udc-controller`), the legacy `/sys/class/android_usb/android0` gadget and
+`/bin/adbd` (102 KB). `setusbconfig adb` fails on this kernel (its configfs route wants `ffs.adb` /
+`mtp` / `mass_storage` function drivers that are not there, and `functionfs` cannot be mounted).
+`app/t2c_usb.sh adb` (`t2c.cgi?a=usbmode&v=adb`, or at boot with `/mnt/UDISK/t2c_adb` =
+`a=flag&f=adb&v=1`) tries the legacy gadget instead: role → `usb_device`, `android0` idVendor 18d1 /
+idProduct 4ee7, `functions=adb`, `enable=1`, then starts adbd. `a=cat&f=usb` shows the state and
+`/tmp/t2c_usb.log`. If it works, `adb forward tcp:8080 tcp:80` reaches the OTA page and t2c.cgi
+without the Wi‑Fi hop (then `T2C_HOST=127.0.0.1:8080 tools/flash.sh …`). **Result (26101525):
+dead end.** `otg_role` does switch to `usb_device`, but `android0` only has `state`/`subsystem`/
+`uevent` (no `enable`/`functions`/`idVendor` — a stub), `/proc/filesystems` lists `configfs` but no
+`functionfs`, and there are no `usb_f_*` function drivers, so adbd has nothing to bind to. The
+role is restored with `t2c_usb.sh none`; leave `/mnt/UDISK/t2c_adb` unset. Confirmed with 26101527:
+`/lib/modules/4.9.118` holds only `8821cs.ko`, `atm.ko`, `br2684.ko`, `crc-ccitt.ko`, `ecb.ko`;
+`/sys/kernel/config/usb_gadget/g1` exists (libcomposite built in) but its `functions/` directory
+is empty — no gadget function driver of any kind. `setusbconfig` is Tina's stock script
+(ffs.adb / mtp / mass_storage via configfs) and cannot work on this kernel. What would work: a
+UART console (`console=ttyS0,115200` on the kernel command line; pads inside the case), or
+cross-building `usb_f_ecm.ko` (USB Ethernet, native on macOS) / `usb_f_fs.ko` (adb) for
+4.9.118 sun8iw19p1 and loading them at run time only.
 
 ## Device log download (`ota/www/cgi-bin/index.cgi?id=logcat`)
 

@@ -11,7 +11,9 @@
     UPDATE_BASE_URL: 'https://raw.githubusercontent.com/taylor224/cpc200-t2c/main/updates'
   };
   var CHANNELS = [6, 36, 40, 44, 48, 149, 153, 157, 161, 165];
-  var DIAG = ['dns', 'hostapd', 'hostapd_default', 'lycfg', 'system', 'mtd', 'cmdline', 'mounts', 'meminfo', 'udisk', 'etc_wifi', 'ps', 'env', 'ifconfig', 'private'];
+  var CH40 = [36, 40, 44, 48, 149, 153, 157, 161];   // 5 GHz channels the hostapd wrapper runs at 40 MHz (valid HT40 pair)
+  var DIAG = ['top', 'dns', 'hostapd', 'hostapd_default', 'lycfg', 'system', 'mtd', 'cmdline', 'mounts', 'meminfo', 'udisk', 'etc_wifi', 'ps', 'env', 'ifconfig', 'private',
+    'hostapd_t2c', 't2c_hostapd', 'hostapd_log', 'flags', 'maps', 'usb', 'vht_fail', 'hostapd_caps', 'wlan_params', 'wlan_ls', 'wlan_all_sta_info', 'wlan_ap_info', 'wlan_trx_info', 'wlan_rx_signal'];
 
   var T = {};
   T.en = {
@@ -25,7 +27,7 @@
     'st.uptime': 'Uptime', 'st.mem': 'Memory used', 'st.cpu': 'CPU', 'st.clients': 'Connected devices',
     'cp.res': 'Resolution', 'cp.auto': 'Auto', 'cp.res_hint': 'HD 1376×1072, SD 800×800, Auto follows the Tesla page. The Tesla page can override this per session.',
     'cp.icon': 'Car icon', 'cp.btnet': 'BT modem', 'on': 'On', 'off': 'Off',
-    'wifi.channel': 'Channel', 'wifi.channel_hint': 'Changing the channel reboots the adapter; your phone reconnects by itself. 36–48 and 149–165 are 5 GHz, 6 is 2.4 GHz.',
+    'wifi.channel': 'Channel', 'wifi.rec': 'recommended', 'wifi.channel_hint': 'Changing the channel reboots the adapter; your phone reconnects by itself. 36–48 and 149–161 are 5 GHz at 40 MHz (recommended), 165 is 5 GHz at 20 MHz, 6 is 2.4 GHz.',
     'wifi.psk': 'Password', 'wifi.psk_hint': '8–11 characters (letters, digits, ! @ # $ ^ * ( ) _ - . , : ; ? ~). The adapter reboots; the iPhone and the Tesla must rejoin with the new password.',
     'wifi.noedit': 'No saved settings file yet — set a password once from the Tesla screen (Wi‑Fi page), then it can be changed here.',
     'save': 'Save', 'show': 'Show', 'hide': 'Hide', 'ok': 'OK', 'cancel': 'Cancel',
@@ -53,7 +55,7 @@
     'st.uptime': '가동 시간', 'st.mem': '메모리 사용', 'st.cpu': 'CPU', 'st.clients': '연결된 기기',
     'cp.res': '해상도', 'cp.auto': '자동', 'cp.res_hint': 'HD 1376×1072, SD 800×800, 자동은 테슬라 페이지를 따릅니다. 테슬라 페이지에서 세션마다 덮어쓸 수 있습니다.',
     'cp.icon': '차량 아이콘', 'cp.btnet': 'BT 모뎀', 'on': '켬', 'off': '끔',
-    'wifi.channel': '채널', 'wifi.channel_hint': '채널을 바꾸면 어댑터가 재부팅되고 폰이 자동으로 다시 접속합니다. 36–48, 149–165는 5 GHz, 6은 2.4 GHz입니다.',
+    'wifi.channel': '채널', 'wifi.rec': '권장', 'wifi.channel_hint': '채널을 바꾸면 어댑터가 재부팅되고 폰이 자동으로 다시 접속합니다. 36–48, 149–161은 5 GHz 40 MHz(권장), 165는 5 GHz 20 MHz, 6은 2.4 GHz입니다.',
     'wifi.psk': '비밀번호', 'wifi.psk_hint': '8–11자(영문, 숫자, ! @ # $ ^ * ( ) _ - . , : ; ? ~). 어댑터가 재부팅되며 iPhone과 테슬라가 새 비밀번호로 다시 접속해야 합니다.',
     'wifi.noedit': '저장된 설정 파일이 아직 없습니다 — 테슬라 화면(Wi‑Fi 페이지)에서 비밀번호를 한 번 설정하면 여기서도 바꿀 수 있습니다.',
     'save': '저장', 'show': '보기', 'hide': '숨기기', 'ok': '확인', 'cancel': '취소',
@@ -81,7 +83,7 @@
     'st.uptime': '稼働時間', 'st.mem': 'メモリ使用量', 'st.cpu': 'CPU', 'st.clients': '接続中のデバイス',
     'cp.res': '解像度', 'cp.auto': '自動', 'cp.res_hint': 'HD 1376×1072、SD 800×800、自動は Tesla ページに従います。Tesla ページ側でセッションごとに上書きできます。',
     'cp.icon': '車のアイコン', 'cp.btnet': 'BT モデム', 'on': 'オン', 'off': 'オフ',
-    'wifi.channel': 'チャンネル', 'wifi.channel_hint': 'チャンネルを変更するとアダプターが再起動し、スマートフォンは自動で再接続します。36〜48 と 149〜165 は 5 GHz、6 は 2.4 GHz です。',
+    'wifi.channel': 'チャンネル', 'wifi.rec': '推奨', 'wifi.channel_hint': 'チャンネルを変更するとアダプターが再起動し、スマートフォンは自動で再接続します。36〜48 と 149〜161 は 5 GHz・40 MHz（推奨）、165 は 5 GHz・20 MHz、6 は 2.4 GHz です。',
     'wifi.psk': 'パスワード', 'wifi.psk_hint': '8〜11 文字（英数字と ! @ # $ ^ * ( ) _ - . , : ; ? ~）。アダプターが再起動し、iPhone と Tesla は新しいパスワードで接続し直す必要があります。',
     'wifi.noedit': '保存された設定ファイルがまだありません。Tesla 画面（Wi‑Fi ページ）で一度パスワードを設定すると、ここでも変更できます。',
     'save': '保存', 'show': '表示', 'hide': '隠す', 'ok': 'OK', 'cancel': 'キャンセル',
@@ -109,7 +111,7 @@
     'st.uptime': '运行时间', 'st.mem': '内存占用', 'st.cpu': 'CPU', 'st.clients': '已连接设备',
     'cp.res': '分辨率', 'cp.auto': '自动', 'cp.res_hint': 'HD 1376×1072，SD 800×800，自动跟随 Tesla 页面。Tesla 页面可按会话覆盖此设置。',
     'cp.icon': '车辆图标', 'cp.btnet': 'BT 调制解调器', 'on': '开', 'off': '关',
-    'wifi.channel': '信道', 'wifi.channel_hint': '更改信道会重启适配器，手机会自动重新连接。36–48 和 149–165 为 5 GHz，6 为 2.4 GHz。',
+    'wifi.channel': '信道', 'wifi.rec': '推荐', 'wifi.channel_hint': '更改信道会重启适配器，手机会自动重新连接。36–48 和 149–161 为 5 GHz、40 MHz（推荐），165 为 5 GHz、20 MHz，6 为 2.4 GHz。',
     'wifi.psk': '密码', 'wifi.psk_hint': '8–11 个字符（字母、数字、! @ # $ ^ * ( ) _ - . , : ; ? ~）。适配器会重启，iPhone 和 Tesla 需用新密码重新连接。',
     'wifi.noedit': '尚无已保存的设置文件 — 先在 Tesla 屏幕（Wi‑Fi 页面）设置一次密码，之后即可在此修改。',
     'save': '保存', 'show': '显示', 'hide': '隐藏', 'ok': '确定', 'cancel': '取消',
@@ -137,7 +139,7 @@
     'st.uptime': '運作時間', 'st.mem': '記憶體使用', 'st.cpu': 'CPU', 'st.clients': '已連線裝置',
     'cp.res': '解析度', 'cp.auto': '自動', 'cp.res_hint': 'HD 1376×1072，SD 800×800，自動跟隨 Tesla 頁面。Tesla 頁面可依工作階段覆寫此設定。',
     'cp.icon': '車輛圖示', 'cp.btnet': 'BT 數據機', 'on': '開', 'off': '關',
-    'wifi.channel': '頻道', 'wifi.channel_hint': '更改頻道會重新啟動轉接器，手機會自動重新連線。36–48 與 149–165 為 5 GHz，6 為 2.4 GHz。',
+    'wifi.channel': '頻道', 'wifi.rec': '建議', 'wifi.channel_hint': '更改頻道會重新啟動轉接器，手機會自動重新連線。36–48 與 149–161 為 5 GHz、40 MHz（建議），165 為 5 GHz、20 MHz，6 為 2.4 GHz。',
     'wifi.psk': '密碼', 'wifi.psk_hint': '8–11 個字元（字母、數字、! @ # $ ^ * ( ) _ - . , : ; ? ~）。轉接器會重新啟動，iPhone 與 Tesla 需以新密碼重新連線。',
     'wifi.noedit': '尚無已儲存的設定檔 — 先在 Tesla 螢幕（Wi‑Fi 頁面）設定一次密碼，之後即可在此修改。',
     'save': '儲存', 'show': '顯示', 'hide': '隱藏', 'ok': '確定', 'cancel': '取消',
@@ -268,7 +270,13 @@
     var card = $('card-carplay');
     card.hidden = !card.querySelector('.row:not([hidden]), #name-edit:not([hidden])');
   }
-  function addChannel(ch) { var o = document.createElement('option'); o.value = o.textContent = ch; $('sel-ch').appendChild(o); }
+  function channelText(ch) {
+    if (ch < 15) return ch + ' \u00b7 2.4 GHz';
+    if (CH40.indexOf(ch) >= 0) return ch + ' \u00b7 5 GHz \u00b7 40 MHz \u00b7 ' + t('wifi.rec');
+    return ch + ' \u00b7 5 GHz \u00b7 20 MHz';
+  }
+  function addChannel(ch) { var o = document.createElement('option'); o.value = ch; o.textContent = channelText(ch); $('sel-ch').appendChild(o); }
+  function relabelChannels() { Array.prototype.forEach.call($('sel-ch').options, function (o) { o.textContent = channelText(+o.value); }); }
 
   /* ------------------------------------------------------------ reboot watch */
   function waitForReboot(msgWhileDown, onBack) {
@@ -421,7 +429,7 @@
   function init() {
     lang = pickLang(localStorage.getItem('t2c.lang'));
     $('lang').value = localStorage.getItem('t2c.lang') || 'auto';
-    $('lang').onchange = function () { localStorage.setItem('t2c.lang', this.value); lang = pickLang(this.value); applyLang(); };
+    $('lang').onchange = function () { localStorage.setItem('t2c.lang', this.value); lang = pickLang(this.value); applyLang(); relabelChannels(); };
     applyLang();
     CHANNELS.forEach(addChannel);
     try { localStorage.removeItem('t2c.updateUrl'); } catch (e) { /* older builds let users override the server */ }
@@ -429,7 +437,7 @@
       var b = document.createElement('button'); b.textContent = name;
       b.onclick = function () {
         $('diag-out').textContent = '…';
-        fetch('/cgi-bin/t2c.cgi?a=cat&f=' + name, { cache: 'no-store' }).then(function (r) { return r.text(); })
+        fetch(name === 'top' ? '/cgi-bin/t2c.cgi?a=top&v=3' : '/cgi-bin/t2c.cgi?a=cat&f=' + name, { cache: 'no-store' }).then(function (r) { return r.text(); })
           .then(function (s) { $('diag-out').textContent = '# ' + name + '\n' + s; }).catch(function (e) { $('diag-out').textContent = e.message; });
       };
       $('diag-btns').appendChild(b);

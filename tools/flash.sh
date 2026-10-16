@@ -5,7 +5,8 @@
 #   tools/flash.sh IMAGE.img --yes      # checks, then upload and wait for the adapter to return
 #
 # Environment: T2C_HOST (default 192.168.3.1); T2C_SSID + T2C_PSK let the script rejoin the
-# adapter's Wi-Fi on macOS if the Mac roams away while the adapter reboots. Logs go to work/flash-<timestamp>/.
+# adapter's Wi-Fi on macOS if the Mac roams away while the adapter reboots; T2C_REJOIN=1 takes them
+# from t2c.cgi?a=info. Without either, the script never touches the Mac's Wi-Fi. Logs: work/flash-<timestamp>/.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 IMG="${1:?usage: flash.sh IMAGE.img [--yes]}"
@@ -24,6 +25,16 @@ echo "   $(echo "$HOSTJSON" | sed -E 's/("uuid"|"imei"|"ICCD"|"iccid"|"wifi"|"ma
 SW=$(echo "$HOSTJSON" | sed -nE 's/.*"appver"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')
 UPD=$(echo "$HOSTJSON" | sed -nE 's/.*"update"[[:space:]]*:[[:space:]]*([0-9]+).*/\1/p')
 echo "   appver=$SW update_state=$UPD"
+# Rejoin data for step 6: the Mac may roam to another network while the adapter reboots. Only
+# with T2C_REJOIN=1 (or explicit T2C_SSID/T2C_PSK) does the script touch the Mac's Wi-Fi; our
+# firmware's t2c.cgi reports the hotspot name and password for that.
+if [ -z "${T2C_SSID:-}" ] && [ "${T2C_REJOIN:-0}" = 1 ]; then
+  INFO=$(curl -s -m 8 "http://$HOST/cgi-bin/t2c.cgi?a=info" 2>/dev/null || true)
+  T2C_SSID=$(echo "$INFO" | sed -nE 's/.*"ssid":"([^"]*)".*/\1/p')
+  T2C_PSK=$(echo "$INFO" | sed -nE 's/.*"psk":"([^"]*)".*/\1/p')
+fi
+if [ -n "${T2C_SSID:-}" ]; then echo "   will rejoin Wi-Fi \"$T2C_SSID\" if the Mac roams away during the reboot"
+else echo "   (no automatic Wi-Fi rejoin: set T2C_REJOIN=1 to let the script re-join the hotspot if the Mac roams away)"; fi
 case "$SW" in *.1508.*) ;; *) echo "   WARNING: appver does not look like the 1508 branch" ;; esac
 [ "${UPD:-0}" = 0 ] || echo "   WARNING: adapter reports an update in progress (state $UPD)"
 

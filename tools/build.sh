@@ -59,7 +59,7 @@ EOF
 find "$WORK/customer/app/www" -type f -exec chmod 755 {} +   # match original image (all 0755)
 find "$WORK/customer/app/www" -type d -exec chmod 755 {} +
 
-echo "== patch app/lylinkui (built-in DNS answers carplay.internal, setting.internal)"
+echo "== patch app/lylinkui (DNS for *.internal, access-unit leak fix, one WebSocket message per access unit; T2C_WS_PATCH=0 drops the last one)"
 python3 tools/patch_lylinkui.py "$WORK/customer/app/lylinkui"
 chmod 755 "$WORK/customer/app/lylinkui"
 
@@ -96,6 +96,32 @@ open(p, 'w').write(json.dumps(j, separators=(', ', ' : ')))
 print('   ' + open(p).read())
 EOF
 fi
+
+echo "== app/lyLoadModule.sh: pass rtw_country_code=XX to the Wi-Fi driver when /mnt/UDISK/t2c_country holds two letters"
+python3 - "$WORK/customer/app/lyLoadModule.sh" <<'EOF'
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = "insmod /mnt/customer/modules/$WIFI_MODULE.ko rtw_vht_enable=2\n"
+assert s.count(old) == 1, "lyLoadModule.sh insmod line not found"
+new = ("CC=$(head -c 2 /mnt/UDISK/t2c_country 2>/dev/null); case \"$CC\" in [A-Z][A-Z]) CC=\"rtw_country_code=$CC\" ;; *) CC='' ;; esac\n"
+       "\t\tinsmod /mnt/customer/modules/$WIFI_MODULE.ko rtw_vht_enable=2 $CC\n")
+open(p, "w").write(s.replace(old, new))
+EOF
+sh -n "$WORK/customer/app/lyLoadModule.sh"
+grep -q "rtw_country_code" "$WORK/customer/app/lyLoadModule.sh" || { echo "lyLoadModule.sh patch failed" >&2; exit 1; }
+echo "== app/hostapd: wrapper that adds the right HT40 side and 802.11ac 80 MHz (src/app/hostapd)"
+# lylinkui runs `hostapd -B /tmp/hostapd.conf` through system(); lyLink.sh puts $WORKDIR first in
+# PATH, so a script of that name in app/ runs instead of the rootfs daemon (and starts it).
+grep -q $'\r' src/app/hostapd && { echo "src/app/hostapd has CRLF line endings" >&2; exit 1; }
+head -1 src/app/hostapd | grep -q '^#!/bin/sh' || { echo "src/app/hostapd must start with #!/bin/sh" >&2; exit 1; }
+sh -n src/app/hostapd
+cp src/app/hostapd "$WORK/customer/app/hostapd"
+chmod 755 "$WORK/customer/app/hostapd"
+echo "== app/t2c_usb.sh: USB device mode (adb) helper for bench work"
+grep -q $'\r' src/app/t2c_usb.sh && { echo "src/app/t2c_usb.sh has CRLF line endings" >&2; exit 1; }
+sh -n src/app/t2c_usb.sh
+cp src/app/t2c_usb.sh "$WORK/customer/app/t2c_usb.sh"
+chmod 755 "$WORK/customer/app/t2c_usb.sh"
 
 echo "== app/Auto.png: default icon of the car's own CarPlay app (Carlinkit)"
 # lylinkui copies this to /tmp/lylink/home.png when no icon is chosen (icon ids map to app/www/icon/<id>.png).
