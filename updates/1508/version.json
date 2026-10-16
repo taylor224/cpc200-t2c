@@ -1,7 +1,7 @@
 {
-  "appver": "26101509.1508.1",
-  "tsl": "26101509.5.4",
-  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101509.img",
-  "msg": "Long-drive stability release: the CarPlay session no longer restarts on every page reload or reconnect, size and UI-size settings take effect, every video frame is decoded, carplay.internal / setting.",
-  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101509"
+  "appver": "26101531.1508.1",
+  "tsl": "26101531.5.4",
+  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101531.img",
+  "msg": "Stability and latency release: the adapter no longer leaks the CarPlay video stream (which killed and restarted lylinkui every few minutes and took the adapter's DNS and the Bluetooth-PAN internet wit",
+  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101531"
 }
