@@ -1,7 +1,7 @@
 {
-  "appver": "26101719.1508.1",
-  "tsl": "26101719.5.4",
-  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101719.img",
-  "msg": "The Rust UI (`t2cui`) is now the default CarPlay screen on every adapter (the vendor UI stays in the image as a one-tap fallback), and two car-side fixes: internet through the hotspot works again and ",
-  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101719"
+  "appver": "26101720.1508.1",
+  "tsl": "26101720.5.4",
+  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101720.img",
+  "msg": "The Tesla keeps the adapter's Wi-Fi \"online\" whatever the phone's Bluetooth link is doing: its connectivity check is now answered by the adapter in every state.",
+  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101720"
 }
