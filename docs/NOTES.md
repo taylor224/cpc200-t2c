@@ -398,6 +398,15 @@ reboot without touching the persistent flag. Still unverified from a laptop at t
 writing: the UDC stayed "not attached" with the adapter on a USB-C hub (TI 0x451) -- cable
 orientation / a USB-A-to-C cable are the next things to try; the DT says `usb_port_type = 1`
 (host) with no VBUS/ID pins, so detection is purely the role switch plus the host's bus reset.
+Register proof that the software side is complete (`tools/usb-ko/t2c_usbreg.c`, a module that
+dumps the MUSB registers at 0x05100000 through `/proc/t2c_usbreg`; `/dev/mem` does not exist on
+this kernel): with the flag on, POWER has soft_connect=1 (D+ pull-up) and hs_en=1, DEVCTL shows
+b_device=1 session=1 vbus=3 (forced valid), ISCR ext_dp=1 force_vbus=3 force_id=3 and
+vbus_valid_from_vbus=0 (the PHY's VBUS pin is not wired), and the UDC interrupt count never
+moves -- no bus reset ever arrives. What remains is the cable/hub path or the connector itself.
+Also learned: `usb_device`/`usb_host` under `/sys/devices/platform/soc/usbc0/` are *read*
+triggers (their show handlers switch the hardware role; writing `otg_role` calls the same
+functions), and reading them stops the manager's scan thread for good.
 
 Kernel modules do load, with the right config. For anything beyond ACM (USB Ethernet =
 `u_ether`+`usb_f_ecm`/`rndis`, FunctionFS for adb) the function drivers have to be cross-built

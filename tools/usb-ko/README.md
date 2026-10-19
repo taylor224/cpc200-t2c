@@ -24,3 +24,7 @@ at offset 0xd8 (the vendor `8821cs.ko` does); every `nm -u` import must appear i
 kernel's export strings (`strings vmlinux | grep -w SYMBOL`; the vmlinux is the xz piggy at
 0x3be9 of `work/swu/kernel`). On the adapter set `echo 1 > /proc/sys/kernel/panic_on_oops` first
 and use `usbtest.sh` (markers in UDISK) so a hang tells which step did it.
+
+`t2c_usbreg.c` is a diagnostic module: `/proc/t2c_usbreg` dumps the USB0 controller's POWER,
+DEVCTL, ISCR and PHYCTL registers (decoded), and accepts `connect`, `disconnect`, `vbus`,
+`pullup` to poke them. Build it with `make M=/work/usbreg modules` the same way.
