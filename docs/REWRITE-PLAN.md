@@ -144,6 +144,10 @@ only if keeping lws/TLS matters (it does not: the entry point becomes `http://10
   `app/ui/*.so`), `--dynamic-linker=/lib/ld-musl-armhf.so.1`, and Rust's bundled `-lunwind`
   (the device libgcc_s carries no `_Unwind_*`). Deploy loop: `tools/shell.py --put FILE` → `/tmp/`,
   `app/t2c_dev.sh run /tmp/lyshim …` (26101706). A hello world ran on the adapter.
+- **Picture mode (26101721, 2026-10-20).** The last stock feature the Rust UI lacked: MJPEG over
+  `/video.jpg` through the vendor transcoder library (`liblylinkav.so`, `lylink_h264_*`), loaded
+  with dlopen when the page asks for it. Bench: ~5 JPEG/s at 1376x1072, mode switches at run
+  time in both directions without a session restart.
 - **P5 default switch (26101719, 2026-10-19 night).** The Rust UI boots on every adapter;
   `/mnt/UDISK/t2c_ui_stock` (phone page System card "CarPlay screen", or
   `t2c.cgi?a=flag&f=ui_stock&v=1`) selects the vendor UI, the watchdog follows the same flag, a

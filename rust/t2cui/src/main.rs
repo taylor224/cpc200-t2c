@@ -13,6 +13,7 @@ mod http;
 mod leds;
 mod log;
 mod mock;
+mod picture;
 mod protocol;
 mod session;
 mod sha1;

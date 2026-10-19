@@ -8,7 +8,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::session::Session;
 use crate::ws;
@@ -212,7 +212,8 @@ impl Http {
                 self.session.log.log(&msg);
                 respond(w, 200, "text/plain", msg.as_bytes(), dynamic)
             }
-            ("GET", "/video.jpg") | ("GET", "/mic_test.pcm") => respond(w, 404, "text/plain", b"not available", dynamic),
+            ("GET", "/video.jpg") => self.mjpeg(w),
+            ("GET", "/mic_test.pcm") => respond(w, 404, "text/plain", b"not available", dynamic),
             ("POST", "/tsl/fw") => {
                 // stock lylinkui streams the upload to /tmp/update.tmp and renames it to
                 // /tmp/update.img when complete (callback_tsl 1595); the stock updater picks that up
@@ -237,6 +238,47 @@ impl Http {
             }
             _ => respond(w, 405, "text/plain", b"nope", dynamic),
         }
+    }
+
+    /// Picture mode: `multipart/x-mixed-replace` of the transcoder's JPEGs, newest frame only (a
+    /// writer that falls behind skips frames). Stays open while the transport is "picture"; a
+    /// switch to video ends it (the page is reloading or restarting the session by then). Returns
+    /// Err at the end so the connection closes instead of waiting for another request.
+    fn mjpeg(&self, w: &mut impl Write) -> io::Result<()> {
+        let pic = &self.session.picture;
+        if !pic.available() {
+            return respond(w, 404, "text/plain", b"picture mode not available", "Cache-Control: no-store\r\n");
+        }
+        w.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=CarPlayVideo\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n")?;
+        w.flush()?;
+        self.session.ensure_picture();
+        let mut last = 0u64;
+        let started = Instant::now();
+        let mut sent = 0u64;
+        loop {
+            match pic.wait_frame(last, Duration::from_secs(1)) {
+                Some((seq, f)) => {
+                    last = seq;
+                    w.write_all(format!("--CarPlayVideo\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n", f.len()).as_bytes())?;
+                    w.write_all(&f)?;
+                    w.write_all(b"\r\n")?;
+                    w.flush()?;
+                    sent += 1;
+                }
+                None => {
+                    let mode = self.session.cfg.lock().unwrap_or_else(|e| e.into_inner()).mode();
+                    if mode != 0 {
+                        self.session.log.dbg(&format!("mjpeg: transport is video now, stream ends after {} frames", sent));
+                        break;
+                    }
+                    // nothing to show for a long time (no phone, no video): let the page retry
+                    if sent == 0 && started.elapsed() > Duration::from_secs(60) {
+                        break;
+                    }
+                }
+            }
+        }
+        Err(io::Error::new(io::ErrorKind::ConnectionAborted, "mjpeg stream ended"))
     }
 
     fn websocket(&self, req: Request, mut r: BufReader<TcpStream>, mut w: io::BufWriter<TcpStream>, peer: String) {

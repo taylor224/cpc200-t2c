@@ -136,6 +136,9 @@ shell flag, the phone page sending a Tesla browser to :8080, and the corrected s
 the car-app icon switch (vendor event 19 -> page menu, back via cmd VIDEO -> untake), smooth FPS
 = 2 in the start struct, picture mode refused with a page reload, and bench routes (`/health`,
 `/cmd?take|untake|key=|cmd=`, `/led?name=&v=`). Not done: the night hint, the car-page firmware
-hand-off is written like stock but unverified, `MX`/list queries, a long soak and the car. The
+hand-off is written like stock but unverified, `MX`/list queries, a long soak and the car.
+26101721 adds picture mode (MJPEG): `picture.rs` dlopens the vendor `liblylinkav.so` and drives
+its `lylink_h264_*` transcoder (V831 decode + JPEG encode) exactly as stock lylinkui did; the
+page's `/video.jpg` is the same multipart stream (NOTES › Picture mode). The
 vendor UI stays in the image as the fallback until the car test; dropping it (and the patcher)
 frees the squashfs space t2cd+t2cui need.

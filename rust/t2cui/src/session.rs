@@ -157,6 +157,8 @@ pub struct Session {
     pub started: Instant,
     pub gocsdk: Mutex<Option<Arc<crate::gocsdk::Gocsdk>>>,
     pub leds: Mutex<Option<Arc<crate::leds::Leds>>>,
+    /// MJPEG transcoder (vendor liblylinkav), used while the page's transport is "picture"
+    pub picture: crate::picture::Picture,
     ap_up: AtomicBool,
     pub fw_pending: AtomicBool,
 }
@@ -167,7 +169,7 @@ pub const KEYREQ_GAP: Duration = Duration::from_millis(2000);
 impl Session {
     pub fn new(log: Arc<Logger>, backend: Box<dyn Backend>, cfg: Cfg, info: SysInfo) -> Arc<Session> {
         Arc::new(Session {
-            log,
+            log: log.clone(),
             backend,
             cfg: Mutex::new(cfg),
             st: Mutex::new(State {
@@ -196,6 +198,7 @@ impl Session {
             started: Instant::now(),
             gocsdk: Mutex::new(None),
             leds: Mutex::new(None),
+            picture: crate::picture::Picture::new(log),
             ap_up: AtomicBool::new(false),
             fw_pending: AtomicBool::new(false),
         })
@@ -436,6 +439,7 @@ impl Session {
             Event::LinkDown => {
                 self.set_link(0);
                 self.set_phone(false, "");
+                self.stop_picture("link down");
             }
             Event::Foreground => {
                 // stock lylinkui only reacts to FOREGROUND/BACKGROUND for link type 8 (cmd 3 / cmd 2);
@@ -461,12 +465,17 @@ impl Session {
                     c.need_idr.store(true, Ordering::Relaxed);
                 }
                 self.set_link(2);
+                if self.picture.running() && self.picture.size() != (w, h) {
+                    self.picture.stop();
+                }
+                self.ensure_picture();
             }
             Event::VideoStop => {
                 self.note("video stop".to_string());
                 if self.st.lock().unwrap_or_else(|e| e.into_inner()).link >= 2 {
                     self.set_link(1);
                 }
+                self.stop_picture("video stop");
             }
             Event::SpsPps(u) => {
                 // type 14 carries the parameter sets -- and after a key-frame request the whole IDR
@@ -474,6 +483,7 @@ impl Session {
                 // codec config and deliver the unit if there is a picture in it.
                 let prefix = p::vcl_offset(&u).map(|off| std::sync::Arc::new(u[..off].to_vec())).unwrap_or_else(|| u.clone());
                 self.st.lock().unwrap_or_else(|e| e.into_inner()).codec = Some(prefix);
+                self.picture.feed(&u);
                 if p::has_idr(&u) {
                     self.units.fetch_add(1, Ordering::Relaxed);
                     self.bytes.fetch_add(u.len() as u64, Ordering::Relaxed);
@@ -483,6 +493,7 @@ impl Session {
             Event::Unit(u) => {
                 self.units.fetch_add(1, Ordering::Relaxed);
                 self.bytes.fetch_add(u.len() as u64, Ordering::Relaxed);
+                self.picture.feed(&u);
                 self.deliver(&u, false);
             }
             Event::AppVersion(v) => {
@@ -514,6 +525,11 @@ impl Session {
     /// as a failed frame and five seconds of those read as "decoder too slow".
     fn deliver(&self, unit: &Unit, is_codec: bool) {
         if is_codec {
+            return;
+        }
+        // picture mode: the units go to the transcoder (stock lylinkui 0x1498c), the page reads
+        // /video.jpg; nothing on the WebSocket
+        if self.picture.running() {
             return;
         }
         let idr = p::has_idr(unit);
@@ -571,6 +587,40 @@ impl Session {
         }
         if want_key {
             self.request_keyframe(false);
+        }
+    }
+
+    // ------------------------------------------------------------------ picture mode
+    /// Run the MJPEG transcoder exactly while the transport is "picture" (lycfg +550 = 0) and the
+    /// phone streams; started late (a page can switch modes mid-session), it gets the cached
+    /// SPS/PPS and a key-frame request so the decoder has a picture within a second.
+    pub fn ensure_picture(&self) {
+        let (mode, link, video, codec) = {
+            let cfg = self.cfg.lock().unwrap_or_else(|e| e.into_inner());
+            let st = self.st.lock().unwrap_or_else(|e| e.into_inner());
+            (cfg.mode(), st.link, st.video, st.codec.clone())
+        };
+        let want = mode == 0 && link >= 2 && video.0 > 0 && video.1 > 0;
+        if want && !self.picture.running() {
+            if !self.picture.can_try() || !self.picture.available() {
+                return;
+            }
+            if self.picture.start(video.0, video.1) {
+                self.note(format!("picture mode: transcoder started {}x{}", video.0, video.1));
+                if let Some(c) = codec {
+                    self.picture.feed(&c);
+                }
+                self.request_keyframe(true);
+            }
+        } else if !want && self.picture.running() {
+            self.stop_picture(if mode != 0 { "video mode" } else { "no video" });
+        }
+    }
+
+    fn stop_picture(&self, why: &str) {
+        if self.picture.running() {
+            self.picture.stop();
+            self.note(format!("picture mode: transcoder stopped ({})", why));
         }
     }
 
@@ -761,6 +811,7 @@ impl Session {
         let v = value as i32;
         let mut restart: Option<&'static str> = None;
         let mut reload = false;
+        let mut mode_changed = false;
         {
             let mut cfg = self.cfg.lock().unwrap_or_else(|e| e.into_inner());
             match key {
@@ -802,19 +853,27 @@ impl Session {
                 }
                 p::KEY_ONLINE => cfg.online = v != 0,
                 p::KEY_MODE => {
-                    // picture mode (MJPEG, v = 0) is not served here: keep H.264 and reload the page
-                    // so it comes back in video mode instead of waiting for /video.jpg
-                    cfg.set_mode(1);
-                    if v == 0 {
-                        self.log.log("picture mode requested: not available in the Rust UI, page reloaded");
+                    // 0 = picture (MJPEG over /video.jpg, the vendor transcoder), 1 = video (H.264
+                    // on the WebSocket). The pipeline switches at once; the page restarts the
+                    // session on its own like it did with stock.
+                    let want: u8 = if v == 0 { 0 } else { 1 };
+                    if want == 0 && !self.picture.available() {
+                        cfg.set_mode(1);
+                        self.log.log("picture mode requested: liblylinkav not available, page reloaded in video mode");
+                        reload = true;
+                    } else if cfg.mode() != want {
+                        cfg.set_mode(want);
+                        mode_changed = true;
                     }
-                    reload = true;
                 }
                 _ => {}
             }
             let _ = cfg.save();
         }
         self.log.log(&format!("setting key {} = {}", key, v));
+        if mode_changed {
+            self.ensure_picture();
+        }
         if reload {
             _c.msg(p::S_RELOAD, b"");
         }
@@ -882,6 +941,7 @@ impl Session {
         if let Some(r) = pending_restart {
             self.restart_now(r);
         }
+        self.ensure_picture();
         self.leds_tick();
     }
 
@@ -934,8 +994,8 @@ impl Session {
         let recent: Vec<String> = st.recent.iter().map(|s| p::js(s)).collect();
         let bt = self.gocsdk.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|g| g.health_json()).unwrap_or_else(|| "null".into());
         format!(
-            "{{\"gocsdk\": {}, \"up\": {}, \"link\": {}, \"phone\": {}, \"phone_name\": {}, \"video\": [{}, {}], \"units\": {}, \"bytes\": {}, \"keyreqs\": {}, \"app\": {}, \"session\": {}, \"override\": {}, \"pages\": [{}], \"recent\": [{}]}}",
-            bt, self.started.elapsed().as_secs(), st.link, st.phone, p::js(&st.phone_name), st.video.0, st.video.1, self.units.load(Ordering::Relaxed), self.bytes.load(Ordering::Relaxed), self.keyreqs.load(Ordering::Relaxed), p::js(&st.app_version),
+            "{{\"gocsdk\": {}, \"picture\": {}, \"mode\": {}, \"up\": {}, \"link\": {}, \"phone\": {}, \"phone_name\": {}, \"video\": [{}, {}], \"units\": {}, \"bytes\": {}, \"keyreqs\": {}, \"app\": {}, \"session\": {}, \"override\": {}, \"pages\": [{}], \"recent\": [{}]}}",
+            bt, self.picture.health_json(), self.cfg.lock().unwrap_or_else(|e| e.into_inner()).mode(), self.started.elapsed().as_secs(), st.link, st.phone, p::js(&st.phone_name), st.video.0, st.video.1, self.units.load(Ordering::Relaxed), self.bytes.load(Ordering::Relaxed), self.keyreqs.load(Ordering::Relaxed), p::js(&st.app_version),
             st.running.as_ref().map(|r| format!("\"{}x{}\"", r.w, r.h)).unwrap_or_else(|| "null".into()),
             st.override_.map(|o| format!("\"{}x{}\"", o.w, o.h)).unwrap_or_else(|| "null".into()),
             pages.join(", "), recent.join(", ")

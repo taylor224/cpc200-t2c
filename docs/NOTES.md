@@ -901,6 +901,34 @@ answered 200 with an HTML body and no header, which connman reads as a captive p
 Tesla showed "this network tried to show a login page that may require authentication, payment
 or terms agreement" on every connection. 26101719 sends the header (`http.rs`).
 
+## Picture mode (MJPEG) in the Rust UI (26101721)
+
+Stock's picture path is five calls into `liblylinkav.so` (an Allwinner MPP build with the
+`lylink_h264_*` wrapper on top): `lylink_h264_init()` (AW_MPI_SYS_Init), `lylink_h264_start(p)`
+with a 24-byte struct {+0 input kind 0 = H.264, +4/+6 input w/h, +8/+10 output w/h (height
+16-aligned), +0xc callback} that creates a VDEC channel (PT 96 = H.264), a VENC channel (PT 26 =
+JPEG, output size, 30 fps) and a thread, `lylink_h264_process(data, len)` per access unit
+(lylinkui 0x1498c, every type-15 unit while the mode byte is 0), `lylink_h264_stop()`,
+`lylink_h264_exit()`. The thread copies each encoded stream (up to two packs) into one buffer and
+calls `cb(0, data, len)` (liblylinkav 0x223f8); lylinkui's callback (0x14150) kept one frame in a
+slot and blocked the thread until the page took it. The library's own dependencies
+(libasound, libcdx_*, libion, libhwdisplay, libglog) live in `/tmp/lylink/eyesee-mpp` and
+`LD_LIBRARY_PATH` from lyLoadModule.sh (`/tmp/lylink/lib:/tmp/lylink/eyesee-mpp:/mnt/customer/app:
+/usr/lib/eyesee-mpp`) is inherited by t2cui.
+
+`rust/t2cui/src/picture.rs` dlopens the library on first use (so the binary has no hard
+dependency and the Mac build just reports "not available"), keeps the newest JPEG in a slot
+(no back-pressure: a slow page skips frames), and `session.rs` runs the transcoder exactly while
+lycfg +550 == 0 and the phone streams (`ensure_picture()` on video start, on the page's MODE key,
+on `/video.jpg` and every tick; started late it gets the cached SPS/PPS and a key-frame request).
+While it runs the access units go to the transcoder and not to the WebSocket. `/video.jpg` is the
+stock `multipart/x-mixed-replace; boundary=CarPlayVideo` stream and ends when the mode goes back
+to video. Measured on the bench (1376x1072 session): about 5 JPEG/s of ~94 KB each (the library
+re-encodes at its own pace even when the picture is static, like stock), CPU unchanged on the
+Rust side, the codec library logs `cedarc ... have no fullFrame` to stdout (it goes to /dev/null
+in the firmware). The page's "auto" transport still prefers H.264 when the browser can decode it;
+picture mode is what the page falls back to, or what the user picks.
+
 ## Car "no internet" on the hotspot = ip_forward never set (fixed in 26101719)
 
 Found in the car 2026-10-19 night with DNS query logging (`t2c_dnsdebug`): the Tesla's online
