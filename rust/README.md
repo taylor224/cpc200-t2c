@@ -122,8 +122,10 @@ above 300 lines/s. `wifi.rs` writes /tmp/hostapd.conf from the rootfs template a
 is missing. Both are on by default on the adapter (`--gocsdk 0`, `--wifi-handoff 0` for bench runs
 next to stock pieces).
 
-Status 2026-10-19 evening: ships in 26101709 behind `/mnt/UDISK/t2c_ui_rust` (lyLoadModule.sh
-starts it instead of `tesla`; the watchdog relaunches it; `t2c.cgi?a=flag&f=ui_rust&v=1|`). On the
+Status 2026-10-19 night: **the default UI since 26101719** (lyLoadModule.sh starts it instead of
+`tesla` unless `/mnt/UDISK/t2c_ui_stock` exists; the watchdog relaunches it; the phone page's
+System card switches `t2c.cgi?a=flag&f=ui_stock&v=1|` and reboots). 26101709..18 shipped it
+behind the opt-in flag `/mnt/UDISK/t2c_ui_rust`, now ignored. On the
 bench it does the whole boot job: hostapd.conf + hostapd, credentials to the phone through the
 library, Bluetooth on (`IS0` -> `AT#P1`), reconnect (`AT#CC`), CarPlay session, PAN (`AT#NC` ->
 udhcpc + MASQUERADE), the page with video and touch. 26101712 adds the page's "Restart adapter" (cmd 10), car identity (icon copied to
@@ -134,5 +136,6 @@ shell flag, the phone page sending a Tesla browser to :8080, and the corrected s
 the car-app icon switch (vendor event 19 -> page menu, back via cmd VIDEO -> untake), smooth FPS
 = 2 in the start struct, picture mode refused with a page reload, and bench routes (`/health`,
 `/cmd?take|untake|key=|cmd=`, `/led?name=&v=`). Not done: the night hint, the car-page firmware
-hand-off is written like stock but unverified, `MX`/list queries, a long soak and the car, then the
-default switch (P5).
+hand-off is written like stock but unverified, `MX`/list queries, a long soak and the car. The
+vendor UI stays in the image as the fallback until the car test; dropping it (and the patcher)
+frees the squashfs space t2cd+t2cui need.

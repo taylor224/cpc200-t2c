@@ -52,8 +52,8 @@ MAX_PER_HOUR=6
 log() { echo "$(date '+%m-%d %H:%M:%S') $*" >> "$LOG" 2>/dev/null; }
 uptime_s() { cut -d' ' -f1 /proc/uptime 2>/dev/null | cut -d. -f1; }
 hostapd_alive() { ps 2>/dev/null | grep -v -e grep -e '/bin/sh' -e 'sh -c' -e '--monitor' | grep -q 'hostapd .*-B /tmp/hostapd'; }
-lylinkui_alive() { ps 2>/dev/null | grep -q -e '[t]esla -s' -e '[t]2cui'; }   # stock UI or the Rust UI (rewrite, /mnt/UDISK/t2c_ui_rust)
-RUSTUI=/mnt/UDISK/t2c_ui_rust
+lylinkui_alive() { ps 2>/dev/null | grep -q -e '[t]esla -s' -e '[t]2cui'; }   # the Rust UI (default) or the vendor UI (/mnt/UDISK/t2c_ui_stock)
+STOCKUI=/mnt/UDISK/t2c_ui_stock
 t2cui_alive() { [ -n "$(pidof t2cui 2>/dev/null)" ]; }
 gocsdk_alive() { [ -n "$(pidof gocsdk 2>/dev/null)" ]; }
 pids() { pidof "$1" 2>/dev/null | tr ' ' ','; }
@@ -174,7 +174,7 @@ while :; do
 			fi
 		fi
 		# the Rust UI has no parent process to respawn it (stock tesla does): two misses -> relaunch
-		if [ -e "$RUSTUI" ] && [ -x "$HERE/t2cui" ]; then
+		if [ ! -e "$STOCKUI" ] && [ -x "$HERE/t2cui" ]; then
 			if t2cui_alive; then ui_miss=0; else
 				ui_miss=$((ui_miss + 1))
 				if [ $ui_miss -ge 2 ]; then

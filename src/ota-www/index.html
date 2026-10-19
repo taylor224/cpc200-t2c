@@ -78,6 +78,13 @@ if (/Tesla/.test(navigator.userAgent) && location.port !== '8080') { location.re
       <a class="btn" id="btn-log" href="/cgi-bin/t2c.cgi?a=log" download="t2c-log.txt" data-i18n="sys.log"></a>
       <button class="btn btn-danger" id="btn-reset" data-i18n="sys.reset"></button>
     </div>
+    <div class="row" id="row-ui">
+      <div class="row-main"><div class="row-title" data-i18n="sys.ui"></div><div class="hint" data-i18n="sys.ui_hint"></div></div>
+      <div class="actions">
+        <button class="btn" id="btn-ui-rust" data-i18n="sys.ui_rust"></button>
+        <button class="btn" id="btn-ui-stock" data-i18n="sys.ui_stock"></button>
+      </div>
+    </div>
     <details class="diag"><summary data-i18n="sys.diag"></summary>
       <div class="diag-btns" id="diag-btns"></div>
       <pre id="diag-out"></pre>

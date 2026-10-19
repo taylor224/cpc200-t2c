@@ -146,20 +146,20 @@ sh -n src/app/t2c_dev.sh
 install -m 755 src/app/t2c_dev.sh "$WORK/customer/app/t2c_dev.sh"
 T2CUI=rust/t2cui/target/armv7-unknown-linux-musleabihf/release/t2cui
 if [ -f "$T2CUI" ] && [ "${T2C_NO_T2CUI:-0}" != 1 ]; then
-  echo "== app/t2cui: Rust UI server ($(stat -f %z "$T2CUI" 2>/dev/null || stat -c %s "$T2CUI") bytes, dynamic musl); opt-in with /mnt/UDISK/t2c_ui_rust"
+  echo "== app/t2cui: Rust UI server ($(stat -f %z "$T2CUI" 2>/dev/null || stat -c %s "$T2CUI") bytes, dynamic musl); default UI, /mnt/UDISK/t2c_ui_stock opts out"
   head -c 20 "$T2CUI" | xxd -p | grep -q '^7f454c46010101' || { echo "$T2CUI is not a 32-bit little-endian ELF" >&2; exit 1; }
   cp "$T2CUI" "$WORK/customer/app/t2cui"; chmod 755 "$WORK/customer/app/t2cui"
 else
   echo "== app/t2cui: NOT built (cd rust/t2cui && cargo build --release --target armv7-unknown-linux-musleabihf); image goes without the Rust UI"
 fi
-echo "== app/lyLoadModule.sh: start app/t2cui instead of lylinkui when /mnt/UDISK/t2c_ui_rust exists (rewrite P5 opt-in)"
+echo "== app/lyLoadModule.sh: start app/t2cui (the Rust UI) instead of lylinkui unless /mnt/UDISK/t2c_ui_stock exists"
 python3 - "$WORK/customer/app/lyLoadModule.sh" <<'EOF2'
 import sys
 p = sys.argv[1]; s = open(p).read()
 old = "/tmp/lylink/tesla -s > /dev/null 2>&1 &\n"
 assert s.count(old) == 1, "lyLoadModule.sh tesla line not found"
-new = ("if [ -e /mnt/UDISK/t2c_ui_rust ] && [ -x $WORKDIR/t2cui ]; then\n"
-       "\techo \" run t2cui (Rust UI, /mnt/UDISK/t2c_ui_rust)\"\n"
+new = ("if [ ! -e /mnt/UDISK/t2c_ui_stock ] && [ -x $WORKDIR/t2cui ]; then\n"
+       "\techo \" run t2cui (Rust UI; touch /mnt/UDISK/t2c_ui_stock for the vendor UI)\"\n"
        "\t$WORKDIR/t2cui --log /tmp/t2cui.log > /dev/null 2>&1 &\n"
        "else\n"
        "\t/tmp/lylink/tesla -s > /dev/null 2>&1 &\n"
@@ -167,7 +167,7 @@ new = ("if [ -e /mnt/UDISK/t2c_ui_rust ] && [ -x $WORKDIR/t2cui ]; then\n"
 open(p, "w").write(s.replace(old, new))
 EOF2
 sh -n "$WORK/customer/app/lyLoadModule.sh"
-grep -q "t2c_ui_rust" "$WORK/customer/app/lyLoadModule.sh" || { echo "lyLoadModule.sh t2cui patch failed" >&2; exit 1; }
+grep -q "t2c_ui_stock" "$WORK/customer/app/lyLoadModule.sh" || { echo "lyLoadModule.sh t2cui patch failed" >&2; exit 1; }
 echo "== app/t2c_usb.sh: USB device mode (adb) helper for bench work"
 grep -q $'\r' src/app/t2c_usb.sh && { echo "src/app/t2c_usb.sh has CRLF line endings" >&2; exit 1; }
 sh -n src/app/t2c_usb.sh

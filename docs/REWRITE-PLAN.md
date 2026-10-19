@@ -144,6 +144,12 @@ only if keeping lws/TLS matters (it does not: the entry point becomes `http://10
   `app/ui/*.so`), `--dynamic-linker=/lib/ld-musl-armhf.so.1`, and Rust's bundled `-lunwind`
   (the device libgcc_s carries no `_Unwind_*`). Deploy loop: `tools/shell.py --put FILE` → `/tmp/`,
   `app/t2c_dev.sh run /tmp/lyshim …` (26101706). A hello world ran on the adapter.
+- **P5 default switch (26101719, 2026-10-19 night).** The Rust UI boots on every adapter;
+  `/mnt/UDISK/t2c_ui_stock` (phone page System card "CarPlay screen", or
+  `t2c.cgi?a=flag&f=ui_stock&v=1`) selects the vendor UI, the watchdog follows the same flag, a
+  flash clears it. The vendor UI, lylinkui and the patcher stay in the image as the fallback until
+  the car test passes; removing them is the next space win. Left: car test (bookmark
+  `http://carplay.internal/`), night hint, `/tsl/fw` hand-off verification, `MX`/list queries.
 - **P5 opt-in in the image (26101707, 2026-10-19 afternoon).** `app/t2cui` ships next to the stock
   UI; `/mnt/UDISK/t2c_ui_rust` makes lyLoadModule.sh start it instead of `tesla`, the watchdog
   relaunches it, the phone page toggles the flag and shows its log. Wi-Fi hand-off verified on the

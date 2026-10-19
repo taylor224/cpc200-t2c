@@ -892,7 +892,26 @@ first server means a retry elsewhere, not SERVFAIL. Also measured on the hotspot
 the API 3.4 s, upload 56 KB/s (~450 kbit/s) -- the PAN is slow, every Claude Code request carries
 the whole conversation, expect long turns. TCP/53 is not forwarded yet (`connection refused`).
 
-## Rust UI opt-in (`/mnt/UDISK/t2c_ui_rust`, 26101707)
+## Tesla "login page" warning = connman online check (fixed in 26101719)
+
+The car checks connectivity the connman way: `GET /online/status.html` on a name the adapter's
+forwarder answers with the UI address while offline (the `tesla` catch-all), and it expects the
+response header `X-ConnMan-Status: online` (stock lylinkui sends exactly that). t2cui 26101709..18
+answered 200 with an HTML body and no header, which connman reads as a captive portal, so the
+Tesla showed "this network tried to show a login page that may require authentication, payment
+or terms agreement" on every connection. 26101719 sends the header (`http.rs`).
+
+## Rust UI is the default (26101719); `/mnt/UDISK/t2c_ui_stock` brings the vendor UI back
+
+From 26101719 `app/lyLoadModule.sh` starts `app/t2cui` on every adapter; the vendor `tesla -s`
+runs only when `/mnt/UDISK/t2c_ui_stock` exists (phone page, System card: "CarPlay screen: New
+UI / Vendor UI" sets the flag through `t2c.cgi?a=flag&f=ui_stock&v=1|` and reboots; the watchdog
+follows the same flag). The old opt-in flag `t2c_ui_rust` is ignored (the CGI still accepts it so
+an older phone page does not error). A flash clears both flags, so a freshly flashed adapter boots
+the Rust UI. Verified on the bench 2026-10-19 night: 26101719 flashed over 26101718, no flags, the
+Rust UI came up (see the release notes). Below: the history of the opt-in period.
+
+## Rust UI opt-in (`/mnt/UDISK/t2c_ui_rust`, 26101707 .. 26101718)
 
 `app/lyLoadModule.sh` starts `app/t2cui --log /tmp/t2cui.log` instead of `/tmp/lylink/tesla -s`
 when the flag exists (phone page: `t2c.cgi?a=flag&f=ui_rust&v=1`, `v=` clears; reboot to switch).

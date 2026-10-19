@@ -31,7 +31,7 @@
     'wifi.psk': 'Password', 'wifi.psk_hint': '8–11 characters (letters, digits, ! @ # $ ^ * ( ) _ - . , : ; ? ~). The adapter reboots; the iPhone and the Tesla must rejoin with the new password.',
     'wifi.noedit': 'No saved settings file yet — set a password once from the Tesla screen (Wi‑Fi page), then it can be changed here.',
     'save': 'Save', 'show': 'Show', 'hide': 'Hide', 'ok': 'OK', 'cancel': 'Cancel',
-    'sec.system': 'System', 'sys.reboot': 'Reboot', 'sys.log': 'Download log', 'sys.reset': 'Factory reset', 'sys.diag': 'Diagnostics',
+    'sec.system': 'System', 'sys.reboot': 'Reboot', 'sys.ui': 'CarPlay screen', 'sys.ui_hint': 'The new UI is the default. Switching reboots the adapter.', 'sys.ui_rust': 'New UI', 'sys.ui_stock': 'Vendor UI', 'q.ui': 'Switch the CarPlay screen and reboot?', 'sys.log': 'Download log', 'sys.reset': 'Factory reset', 'sys.diag': 'Diagnostics',
     'sec.software': 'Software', 'sw.current': 'Installed',
     'sw.check': 'Check for updates', 'sw.upload': 'Install from file', 'sw.install': 'Download and install',
     'sw.latest': 'Your software is up to date', 'sw.new': 'New version available', 'sw.checking': 'Checking…', 'sw.check_fail': 'Could not reach the update server',
@@ -59,7 +59,7 @@
     'wifi.psk': '비밀번호', 'wifi.psk_hint': '8–11자(영문, 숫자, ! @ # $ ^ * ( ) _ - . , : ; ? ~). 어댑터가 재부팅되며 iPhone과 테슬라가 새 비밀번호로 다시 접속해야 합니다.',
     'wifi.noedit': '저장된 설정 파일이 아직 없습니다 — 테슬라 화면(Wi‑Fi 페이지)에서 비밀번호를 한 번 설정하면 여기서도 바꿀 수 있습니다.',
     'save': '저장', 'show': '보기', 'hide': '숨기기', 'ok': '확인', 'cancel': '취소',
-    'sec.system': '시스템', 'sys.reboot': '재부팅', 'sys.log': '로그 다운로드', 'sys.reset': '공장 초기화', 'sys.diag': '진단 정보',
+    'sec.system': '시스템', 'sys.reboot': '재부팅', 'sys.ui': 'CarPlay 화면', 'sys.ui_hint': '새 UI가 기본입니다. 전환하면 어댑터가 재부팅됩니다.', 'sys.ui_rust': '새 UI', 'sys.ui_stock': '제조사 UI', 'q.ui': 'CarPlay 화면을 전환하고 재부팅할까요?', 'sys.log': '로그 다운로드', 'sys.reset': '공장 초기화', 'sys.diag': '진단 정보',
     'sec.software': '소프트웨어', 'sw.current': '설치된 버전',
     'sw.check': '업데이트 확인', 'sw.upload': '파일로 설치', 'sw.install': '다운로드 후 설치',
     'sw.latest': '최신 버전입니다', 'sw.new': '새 버전이 있습니다', 'sw.checking': '확인 중…', 'sw.check_fail': '업데이트 서버에 연결할 수 없습니다',
@@ -87,7 +87,7 @@
     'wifi.psk': 'パスワード', 'wifi.psk_hint': '8〜11 文字（英数字と ! @ # $ ^ * ( ) _ - . , : ; ? ~）。アダプターが再起動し、iPhone と Tesla は新しいパスワードで接続し直す必要があります。',
     'wifi.noedit': '保存された設定ファイルがまだありません。Tesla 画面（Wi‑Fi ページ）で一度パスワードを設定すると、ここでも変更できます。',
     'save': '保存', 'show': '表示', 'hide': '隠す', 'ok': 'OK', 'cancel': 'キャンセル',
-    'sec.system': 'システム', 'sys.reboot': '再起動', 'sys.log': 'ログをダウンロード', 'sys.reset': '初期化', 'sys.diag': '診断情報',
+    'sec.system': 'システム', 'sys.reboot': '再起動', 'sys.ui': 'CarPlay 画面', 'sys.ui_hint': '新しい UI が既定です。切り替えるとアダプターが再起動します。', 'sys.ui_rust': '新しい UI', 'sys.ui_stock': 'メーカー UI', 'q.ui': 'CarPlay 画面を切り替えて再起動しますか？', 'sys.log': 'ログをダウンロード', 'sys.reset': '初期化', 'sys.diag': '診断情報',
     'sec.software': 'ソフトウェア', 'sw.current': 'インストール済み',
     'sw.check': '更新を確認', 'sw.upload': 'ファイルからインストール', 'sw.install': 'ダウンロードしてインストール',
     'sw.latest': '最新の状態です', 'sw.new': '新しいバージョンがあります', 'sw.checking': '確認中…', 'sw.check_fail': '更新サーバーに接続できません',
@@ -115,7 +115,7 @@
     'wifi.psk': '密码', 'wifi.psk_hint': '8–11 个字符（字母、数字、! @ # $ ^ * ( ) _ - . , : ; ? ~）。适配器会重启，iPhone 和 Tesla 需用新密码重新连接。',
     'wifi.noedit': '尚无已保存的设置文件 — 先在 Tesla 屏幕（Wi‑Fi 页面）设置一次密码，之后即可在此修改。',
     'save': '保存', 'show': '显示', 'hide': '隐藏', 'ok': '确定', 'cancel': '取消',
-    'sec.system': '系统', 'sys.reboot': '重启', 'sys.log': '下载日志', 'sys.reset': '恢复出厂设置', 'sys.diag': '诊断信息',
+    'sec.system': '系统', 'sys.reboot': '重启', 'sys.ui': 'CarPlay 画面', 'sys.ui_hint': '新界面为默认。切换会重启适配器。', 'sys.ui_rust': '新界面', 'sys.ui_stock': '原厂界面', 'q.ui': '切换 CarPlay 画面并重启？', 'sys.log': '下载日志', 'sys.reset': '恢复出厂设置', 'sys.diag': '诊断信息',
     'sec.software': '软件', 'sw.current': '已安装',
     'sw.check': '检查更新', 'sw.upload': '从文件安装', 'sw.install': '下载并安装',
     'sw.latest': '已是最新版本', 'sw.new': '有新版本', 'sw.checking': '检查中…', 'sw.check_fail': '无法连接更新服务器',
@@ -143,7 +143,7 @@
     'wifi.psk': '密碼', 'wifi.psk_hint': '8–11 個字元（字母、數字、! @ # $ ^ * ( ) _ - . , : ; ? ~）。轉接器會重新啟動，iPhone 與 Tesla 需以新密碼重新連線。',
     'wifi.noedit': '尚無已儲存的設定檔 — 先在 Tesla 螢幕（Wi‑Fi 頁面）設定一次密碼，之後即可在此修改。',
     'save': '儲存', 'show': '顯示', 'hide': '隱藏', 'ok': '確定', 'cancel': '取消',
-    'sec.system': '系統', 'sys.reboot': '重新啟動', 'sys.log': '下載記錄', 'sys.reset': '恢復原廠設定', 'sys.diag': '診斷資訊',
+    'sec.system': '系統', 'sys.reboot': '重新啟動', 'sys.ui': 'CarPlay 畫面', 'sys.ui_hint': '新介面為預設。切換會重新啟動轉接器。', 'sys.ui_rust': '新介面', 'sys.ui_stock': '原廠介面', 'q.ui': '切換 CarPlay 畫面並重新啟動？', 'sys.log': '下載記錄', 'sys.reset': '恢復原廠設定', 'sys.diag': '診斷資訊',
     'sec.software': '軟體', 'sw.current': '已安裝',
     'sw.check': '檢查更新', 'sw.upload': '從檔案安裝', 'sw.install': '下載並安裝',
     'sw.latest': '已是最新版本', 'sw.new': '有新版本', 'sw.checking': '檢查中…', 'sw.check_fail': '無法連線更新伺服器',
@@ -468,6 +468,23 @@
           .catch(function (e) { toast(t('msg.fail') + ' (' + e.message + ')'); });
       });
     };
+    // CarPlay screen: the Rust UI is the default; /mnt/UDISK/t2c_ui_stock brings the vendor UI back
+    function uiSwitch(stock) {
+      confirmBox(t('q.ui')).then(function (ok) {
+        if (!ok) return;
+        get('/cgi-bin/t2c.cgi?a=flag&f=ui_stock&v=' + (stock ? '1' : ''))
+          .then(function () { return get('/cgi-bin/t2c.cgi?a=reboot'); })
+          .then(function () { waitForReboot(t('msg.rebooting')); })
+          .catch(function (e) { toast(t('msg.fail') + ' (' + e.message + ')'); });
+      });
+    }
+    $('btn-ui-rust').onclick = function () { uiSwitch(false); };
+    $('btn-ui-stock').onclick = function () { uiSwitch(true); };
+    fetch('/cgi-bin/t2c.cgi?a=cat&f=flags', { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (txt) {
+      var stock = /t2c_ui_stock/.test(txt);
+      $('btn-ui-rust').classList.toggle('btn-primary', !stock);
+      $('btn-ui-stock').classList.toggle('btn-primary', stock);
+    }).catch(function () {});
     $('btn-reset').onclick = function () {
       confirmBox(t('q.reset')).then(function (ok) {
         if (!ok) return;

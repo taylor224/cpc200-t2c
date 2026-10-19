@@ -183,7 +183,10 @@ impl Http {
                 respond(w, 200, "text/html; charset=utf-8", &body, dynamic)
             }
             ("GET", "/tsl/bt") => respond(w, 200, "application/json", crate::status::bt_list().as_bytes(), dynamic),
-            ("GET", "/online/status.html") => respond(w, 200, "text/html", b"<html><body>online</body></html>", dynamic),
+            // Tesla's connman online check: it wants `X-ConnMan-Status: online` on this URL (stock
+            // lylinkui sends it); a 200 without the header reads as a captive portal ("this network
+            // tried to show a login page") in the car.
+            ("GET", "/online/status.html") => respond(w, 200, "text/plain", b"online", "X-ConnMan-Status: online\r\nCache-Control: no-store\r\n"),
             ("GET", "/health") => respond(w, 200, "application/json", self.session.health_json().as_bytes(), dynamic),
             ("GET", "/cmd") | ("GET", "/led") if !self.session.debug_allowed() => respond(w, 404, "text/plain", b"not found", dynamic),
             ("GET", "/cmd") => {

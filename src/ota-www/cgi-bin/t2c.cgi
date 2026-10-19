@@ -96,10 +96,10 @@ flag)
   # ?a=flag&f=NAME&v=VALUE writes /mnt/UDISK/t2c_NAME (empty value deletes it): hostapd_debug,
   # country (two letters), vht_off. Read by the hostapd wrapper at its next launch.
   json_hdr
-  case "$F" in hostapd_debug|country|vht_off|vht80|hostapd_extra|adb|watchdog_off|dnsredir_off|dnsdebug|shell|autoreboot_off|ui_rust) ;; *) printf '{"code":3,"msg":"unknown flag"}'; exit 0 ;; esac
+  case "$F" in hostapd_debug|country|vht_off|vht80|hostapd_extra|adb|watchdog_off|dnsredir_off|dnsdebug|shell|autoreboot_off|ui_rust|ui_stock) ;; *) printf '{"code":3,"msg":"unknown flag"}'; exit 0 ;; esac
   case "$V" in *[!A-Za-z0-9_=\;\[\]-]*) printf '{"code":2,"msg":"bad value"}'; exit 0 ;; esac
   # presence flags: v=0 / v=off clears them too (the daemons test for the file, not its content)
-  case "$F" in hostapd_debug|vht_off|vht80|adb|watchdog_off|dnsredir_off|dnsdebug|shell|autoreboot_off|ui_rust) case "$V" in 0|off|false|no) V='' ;; esac ;; esac
+  case "$F" in hostapd_debug|vht_off|vht80|adb|watchdog_off|dnsredir_off|dnsdebug|shell|autoreboot_off|ui_rust|ui_stock) case "$V" in 0|off|false|no) V='' ;; esac ;; esac
   if [ -z "$V" ]; then rm -f "/mnt/UDISK/t2c_$F"; printf '{"code":0,"flag":"%s","value":""}' "$F"
   elif printf '%s\n' "$V" > "/mnt/UDISK/t2c_$F" 2>/dev/null; then sync; printf '{"code":0,"flag":"%s","value":"%s"}' "$F" "$(je "$V")"
   else printf '{"code":1,"msg":"write failed"}'; fi
@@ -231,7 +231,7 @@ cat)
     btaudio)         cmd='logcat -v threadtime -d 2>/dev/null | grep -iE "sco|wbs|msbc|pcm fs|pcm clk|HFP version|Mic vol|NREC|Voice Recognition|hfp (activate|established|link lost|normal disconnect|disconnect by)|IND_SCO|Audio is|phonecall|speech|mic (mute|unmute|in start|out)|apm_mic" | tail -n 250' ;;
     usb)             cmd='/mnt/customer/app/t2c_usb.sh status; ls -la /bin/adbd /bin/setusbconfig 2>&1; echo "## modules:"; ls -R /lib/modules 2>&1 | head -n 60; echo "## gadget dirs:"; ls /sys/kernel/config/usb_gadget/ /sys/kernel/config/usb_gadget/*/ /sys/kernel/config/usb_gadget/*/functions 2>&1 | head -n 20; echo "## usb-related in /proc/modules + builtin:"; grep -iE "usb|gadget|udc|composite|f_" /proc/modules /lib/modules/*/modules.builtin 2>/dev/null | head -n 20; echo "## setusbconfig:"; cat /bin/setusbconfig' ;;
     maps)            cmd='for p in $(ps 2>/dev/null | awk "/tesla -s/ && !/awk/ {print \$1}"); do echo "## pid $p"; grep -E "^(VmRSS|VmData|VmSize|Threads)" /proc/$p/status; while read -r range perm rest; do case "$perm" in *w*) ;; *) continue ;; esac; a=${range%-*}; b=${range#*-}; sz=$(( (0x$b - 0x$a) / 1024 )); n=${rest##* }; case "$n" in [0-9]*|"") n=anon ;; esac; echo "$sz $n"; done < /proc/$p/maps | awk "{t[\$2]+=\$1; c[\$2]++} END {for (n in t) printf \"%8d kB %4d maps  %s\\n\", t[n], c[n], n}" | sort -rn | head -n 10; done' ;;
-    flags)           cmd='for f in /mnt/UDISK/t2c_hostapd_debug /mnt/UDISK/t2c_country /mnt/UDISK/t2c_vht_off /mnt/UDISK/t2c_vht80 /mnt/UDISK/t2c_hostapd_extra /mnt/UDISK/t2c_adb /mnt/UDISK/t2c_watchdog_off /mnt/UDISK/t2c_dnsredir_off /mnt/UDISK/t2c_dnsdebug /mnt/UDISK/t2c_shell /mnt/UDISK/t2c_autoreboot_off /mnt/UDISK/t2c_ui_rust /mnt/UDISK/t2c_crash_count /mnt/UDISK/t2c_vht_fail; do [ -e "$f" ] && printf "%s: %s\\n" "$f" "$(cat "$f" 2>/dev/null)"; done; true' ;;
+    flags)           cmd='for f in /mnt/UDISK/t2c_hostapd_debug /mnt/UDISK/t2c_country /mnt/UDISK/t2c_vht_off /mnt/UDISK/t2c_vht80 /mnt/UDISK/t2c_hostapd_extra /mnt/UDISK/t2c_adb /mnt/UDISK/t2c_watchdog_off /mnt/UDISK/t2c_dnsredir_off /mnt/UDISK/t2c_dnsdebug /mnt/UDISK/t2c_shell /mnt/UDISK/t2c_autoreboot_off /mnt/UDISK/t2c_ui_stock /mnt/UDISK/t2c_ui_rust /mnt/UDISK/t2c_crash_count /mnt/UDISK/t2c_vht_fail; do [ -e "$f" ] && printf "%s: %s\\n" "$f" "$(cat "$f" 2>/dev/null)"; done; true' ;;
     wlan_params)     cmd='grep -r . /sys/module/8821cs/parameters/' ;;
     hostapd_caps)    cmd='/usr/sbin/hostapd -v 2>&1 | head -n 3; /usr/sbin/hostapd -h 2>&1 | grep -E "^ +-[a-zA-Z]"; for k in ieee80211ac vht_oper_chwidth vht_capab ieee80211n ht_capab; do printf "%s: %s\n" "$k" "$(grep -c "$k" /usr/sbin/hostapd 2>/dev/null)"; done; ls -la /usr/sbin/hostapd' ;;
     wlan_ls)         cmd='ls -la /proc/net/rtl8821cs/wlan0' ;;

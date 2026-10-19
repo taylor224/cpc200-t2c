@@ -28,8 +28,8 @@ if [ -f "$TMP/fs/app/t2cd" ]; then
 fi
 if [ -f "$TMP/fs/app/t2cui" ]; then
   head -c 20 "$TMP/fs/app/t2cui" | xxd -p | grep -q '^7f454c46010101' || { echo "FAIL: app/t2cui is not an ARM ELF" >&2; exit 1; }
-  grep -q 't2c_ui_rust' "$TMP/fs/app/lyLoadModule.sh" || { echo "FAIL: lyLoadModule.sh has no t2c_ui_rust switch" >&2; exit 1; }
-  echo "   app/t2cui: $(stat -f %z "$TMP/fs/app/t2cui" 2>/dev/null || stat -c %s "$TMP/fs/app/t2cui") bytes (opt-in: /mnt/UDISK/t2c_ui_rust)"
+  grep -q 't2c_ui_stock' "$TMP/fs/app/lyLoadModule.sh" || { echo "FAIL: lyLoadModule.sh has no t2c_ui_stock switch" >&2; exit 1; }
+  echo "   app/t2cui: $(stat -f %z "$TMP/fs/app/t2cui" 2>/dev/null || stat -c %s "$TMP/fs/app/t2cui") bytes (default UI; /mnt/UDISK/t2c_ui_stock = vendor UI)"
 fi
 sh -n "$TMP/fs/app/lyLoadModule.sh" || { echo "FAIL: lyLoadModule.sh syntax" >&2; exit 1; }
 # the stock OTA CGI must be the shipped binary (ELF), the page ours
