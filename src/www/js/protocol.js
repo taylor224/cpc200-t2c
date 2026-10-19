@@ -21,7 +21,7 @@
 (function (global) {
   'use strict';
 
-  var CMD = { VIDEO: 0, AUTO_ON: 1, AUTO_OFF: 2, BTLIST: 5, DISCONNECT: 6, FACTORY_RESET: 7, KEYFRAME: 8, QR: 9, REBOOT: 10 };  // 10: Rust UI only (stock ignores it)
+  var CMD = { VIDEO: 0, AUTO_ON: 1, AUTO_OFF: 2, BTLIST: 5, DISCONNECT: 6, FACTORY_RESET: 7, KEYFRAME: 8, QR: 9, REBOOT: 10, USB_ON: 11, USB_OFF: 12 };  // 10-12: Rust UI only (stock ignores them)
   var KEY = { NIGHT: 1, PIXEL: 2, DRIVER: 3, CHANNEL: 6, LANG: 7, BTNET: 8, FPS: 9, ONLINE: 10, MODE: 11 };
 
   // Seconds of missing pongs before the link is probed (status JSON carries the pong once a second).

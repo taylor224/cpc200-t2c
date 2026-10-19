@@ -312,6 +312,10 @@
       </div>
       <div class="group">
         <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="home.usb"></div><div class="row-hint" data-i18n="home.usb_hint"></div></div>
+          <label class="switch"><input type="checkbox" id="usb-sw"><span></span></label>
+        </div>
+        <div class="row">
           <div class="row-main"><div class="row-title" data-i18n="home.reboot"></div><div class="row-hint" data-i18n="home.reboot_hint"></div></div>
           <button class="btn btn-danger btn-sm" id="btn-reboot" data-i18n="home.reboot_btn"></button>
         </div>

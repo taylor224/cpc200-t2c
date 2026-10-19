@@ -36,6 +36,12 @@ tools/shell.py -c 'ps; free'         # one command, output, exit
 curl 'http://192.168.3.1/cgi-bin/t2c.cgi?a=flag&f=shell&v='
 ```
 
+USB console (26101722): with `/mnt/UDISK/t2c_usb` (`?a=flag&f=usb&v=1`) t2cd turns the USB-C
+port into a CDC-ACM serial device with a root shell (`usb.rs`; the vendor kernel has that one
+gadget function built in) -- plug the adapter into a Mac, then `tools/usbserial.py cmd 'ps'`,
+`shell`, or `flash IMAGE` (image over the serial console, no Wi-Fi). Off by default: in the car
+the port is the Tesla's USB host.
+
 Ports: DNS forwarder udp/5300 (5353 belongs to mdnsd), shell tcp/2323; `--no-shell`,
 `--shell-port`. A bench build can key the shell on another flag file
 (`T2CD_SHELL_FLAG=/mnt/UDISK/t2c_dnsdebug cargo build …`) when the firmware's CGI predates the

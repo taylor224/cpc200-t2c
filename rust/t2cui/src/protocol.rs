@@ -40,6 +40,9 @@ pub const CMD_DISCONNECT: i16 = 6;
 pub const CMD_FACTORY_RESET: i16 = 7;
 pub const CMD_KEYFRAME: i16 = 8;
 pub const CMD_QR: i16 = 9;
+/// Rust UI only: USB console (CDC-ACM shell, t2cd) on / off = the /mnt/UDISK/t2c_usb flag.
+pub const CMD_USB_ON: i16 = 11;
+pub const CMD_USB_OFF: i16 = 12;
 
 pub const KEY_NIGHT: i16 = 1;
 pub const KEY_PIXEL: i16 = 2;

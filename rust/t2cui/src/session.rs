@@ -163,6 +163,12 @@ pub struct Session {
     pub fw_pending: AtomicBool,
 }
 
+/// The t2cd USB console flag (usb.rs there): the page toggles it, t2cd polls it.
+pub const USB_FLAG: &str = "/mnt/UDISK/t2c_usb";
+pub fn usb_flag() -> bool {
+    std::path::Path::new(USB_FLAG).exists()
+}
+
 pub const RESTART_GAP: Duration = Duration::from_secs(10);
 pub const KEYREQ_GAP: Duration = Duration::from_millis(2000);
 
@@ -793,6 +799,21 @@ impl Session {
                 std::thread::spawn(|| crate::status::sh("rm -rf /mnt/UDISK/*; sync; sleep 1; reboot"));
             }
             p::CMD_KEYFRAME => self.request_keyframe(false),
+            p::CMD_USB_ON | p::CMD_USB_OFF => {
+                let on = cmd == p::CMD_USB_ON;
+                let r = if on {
+                    std::fs::write(USB_FLAG, "1\n")
+                } else {
+                    match std::fs::remove_file(USB_FLAG) {
+                        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+                        _ => Ok(()),
+                    }
+                };
+                match r {
+                    Ok(()) => self.note(format!("USB console {} (page #{})", if on { "on" } else { "off" }, c.id)),
+                    Err(e) => self.log.log(&format!("USB console flag: {}", e)),
+                }
+            }
             10 => {
                 // page home "Restart adapter" (Rust UI only)
                 self.note(format!("page #{} asked for a reboot", c.id));
@@ -892,11 +913,11 @@ impl Session {
         let i = &self.info;
         let auto = cfg.auto();
         format!(
-            "{{\"link\": {}, \"phone\": {}, \"bt\": {}, \"auto\": {}, \"ssid\": {}, \"psk\": {}, \"ch\": {}, \"sh\": {}, \"night\": {}, \"pixel\": {}, \"driver\": {}, \"fps\": {}, \"vid\": {}, \"icons\": {}, \"icon\": {}, \"name\": {}, \"lan\": {}, \"SN\": \"TesPush_T2C\", \"SW\": {}, \"LY\": {}, \"HW\": {}, \"MD\": {}, \"imei\": \"\", \"ccid\": \"\", \"btnet\": {}, \"wifi\": {}, \"bl\": 0, \"online\": {}}}",
+            "{{\"link\": {}, \"phone\": {}, \"bt\": {}, \"auto\": {}, \"ssid\": {}, \"psk\": {}, \"ch\": {}, \"sh\": {}, \"night\": {}, \"pixel\": {}, \"driver\": {}, \"fps\": {}, \"vid\": {}, \"icons\": {}, \"icon\": {}, \"name\": {}, \"lan\": {}, \"SN\": \"TesPush_T2C\", \"SW\": {}, \"LY\": {}, \"HW\": {}, \"MD\": {}, \"imei\": \"\", \"ccid\": \"\", \"btnet\": {}, \"wifi\": {}, \"bl\": 0, \"online\": {}, \"usb\": {}}}",
             st.link, st.phone, p::js(&i.bt_name), auto, p::js(&i.ssid), p::js(&cfg.psk()), cfg.channel(),
             0, cfg.night(), cfg.pixel(), cfg.driver(), cfg.fps(),
             cfg.mode() == 1, i.icons, p::js(&cfg.icon()), p::js(&cfg.name()), cfg.lang(), p::js(&i.sw), p::js(&i.ly), p::js(&i.hw), p::js(&i.md),
-            cfg.btnet(), p::js(&i.wifi_mac), cfg.online
+            cfg.btnet(), p::js(&i.wifi_mac), cfg.online, usb_flag()
         )
     }
 

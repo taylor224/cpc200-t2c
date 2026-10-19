@@ -5,7 +5,7 @@
 //! app/t2c_watchdog.sh, which t2cd restarts in turn when it is missing.
 //!
 //!   t2cd [--port 5300] [--tesla-ip 101.200.208.6] [--settings-ip 192.168.3.1] [--upstream IP[:PORT]]...
-//!        [--timeout-ms 2500] [--no-iptables] [--no-supervise] [--no-shell] [--shell-port 2323]
+//!        [--timeout-ms 2500] [--no-iptables] [--no-supervise] [--no-shell] [--shell-port 2323] [--no-usb]
 //!        [--online|--offline] [--log /tmp/t2cd.log] [--debug]
 //!
 //! /mnt/UDISK/t2c_dnsredir_off removes the nat rule (the forwarder keeps answering on its port);
@@ -18,6 +18,7 @@ mod forward;
 mod iptables;
 mod log;
 mod shell;
+mod usb;
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
@@ -33,6 +34,8 @@ const SHELL_FLAG: &str = match option_env!("T2CD_SHELL_FLAG") {
     Some(p) => p,
     None => "/mnt/UDISK/t2c_shell",
 };
+/// USB device mode (CDC-ACM serial console + firmware upload): `usb.rs`.
+const USB_FLAG: &str = "/mnt/UDISK/t2c_usb";
 const WATCHDOG: &str = "/mnt/customer/app/t2c_watchdog.sh";
 
 static LOG: OnceLock<Arc<log::Logger>> = OnceLock::new();
@@ -127,6 +130,7 @@ fn main() {
     let mut use_iptables = true;
     let mut use_supervise = true;
     let mut use_shell = true;
+    let mut use_usb = true;
     let mut shell_port: u16 = shell::DEFAULT_PORT;
     let mut force_online: Option<bool> = None;
     let mut logpath: Option<PathBuf> = Some(PathBuf::from("/tmp/t2cd.log"));
@@ -156,6 +160,7 @@ fn main() {
             "--no-iptables" => use_iptables = false,
             "--no-supervise" => use_supervise = false,
             "--no-shell" => use_shell = false,
+            "--no-usb" => use_usb = false,
             "--shell-port" => shell_port = val().parse().expect("port"),
             "--online" => force_online = Some(true),
             "--offline" => force_online = Some(false),
@@ -233,6 +238,9 @@ fn main() {
     }
     if use_shell {
         shell::start(SHELL_FLAG, shell_port, settings_ip, Arc::clone(&log));
+    }
+    if use_usb {
+        usb::start(USB_FLAG, Arc::clone(&log));
     }
     fwd.serve()
 }

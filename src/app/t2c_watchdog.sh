@@ -89,6 +89,8 @@ tsf_probe() {
 }
 
 # evidence of a dead radio, then a clean reboot (unless disabled or looping)
+# no Wi-Fi = no way in: ask t2cd for the USB serial console (CDC-ACM root shell) until the next boot
+usb_rescue() { [ -e /tmp/t2c_usb_rescue ] || { touch /tmp/t2c_usb_rescue; log "wifi down ($1): USB console enabled (/tmp/t2c_usb_rescue, until reboot)"; }; }
 radio_dead() {
 	reason=$1
 	cnt=$(cat "$CRASHCOUNT" 2>/dev/null); case "$cnt" in ''|*[!0-9]*) cnt=0 ;; esac
@@ -101,6 +103,7 @@ radio_dead() {
 	} >> "$CRASH" 2>/dev/null
 	sz=$(wc -c < "$CRASH" 2>/dev/null); case "$sz" in ''|*[!0-9]*) sz=0 ;; esac
 	[ "$sz" -gt 16384 ] && { tail -c 8192 "$CRASH" > "$CRASH.tmp" 2>/dev/null && mv "$CRASH.tmp" "$CRASH"; }
+	usb_rescue "radio dead"
 	if [ -f "$NOREBOOT" ]; then log "radio dead ($reason): evidence saved, auto-reboot disabled by flag"; sync; return 0; fi
 	if [ "$cnt" -ge 3 ]; then log "radio dead ($reason): evidence saved, not rebooting again ($cnt in a row)"; sync; return 0; fi
 	echo $((cnt + 1)) > "$CRASHCOUNT" 2>/dev/null
@@ -195,6 +198,9 @@ while :; do
 					hap_n=$((hap_n + 1)); hap_miss=0
 					log "no hostapd for $((3 * PERIOD)) s, relaunch ($hap_n this hour)"
 					PATH="$HERE:$PATH" "$HERE/hostapd" -B "$CONF" </dev/null >>"$LOG" 2>&1
+					[ $hap_n -ge 2 ] && usb_rescue "hostapd relaunched $hap_n times"
+				else
+					usb_rescue "hostapd gave up"
 				fi
 			fi
 		fi

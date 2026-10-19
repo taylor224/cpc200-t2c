@@ -804,6 +804,7 @@
     $('wifi-psk').value = j.psk || '';
     $('wifi-ch').textContent = channelLabel(j.ch);
     $('auto').checked = !!j.auto;
+    if ($('usb-sw')) $('usb-sw').checked = !!j.usb;
     $('night').checked = j.night > 2;
     segSet('seg-night', j.night > 2 ? j.night - 3 : j.night);
     $('online').checked = !!j.online;
@@ -1085,6 +1086,7 @@
 
     $('btn-update').onclick = checkUpdate;
     try { localStorage.removeItem('t2c.updateUrl'); } catch (e) { /* older builds stored a server override */ }
+    $('usb-sw').onchange = function () { logEvent('usb', this.checked ? 'on' : 'off'); link.cmd(this.checked ? CMD.USB_ON : CMD.USB_OFF); };
     $('btn-reboot').onclick = function () {
       if (!requireLink()) return;
       dialog({ title: t('home.reboot'), text: t('home.reboot_confirm'),

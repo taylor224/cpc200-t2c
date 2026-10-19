@@ -368,7 +368,58 @@ ratio — the data that tells whether the radio or the adapter pipeline is the b
 The adapter's load of 2–2.8 with a modest CPU busy share means tasks are waiting in
 uninterruptible sleep (the SDIO driver threads), not computing.
 
-## USB device mode (adb) for bench work
+## USB device mode: CDC-ACM console and firmware upload over USB (26101722)
+
+Found 2026-10-20 while trying to give the adapter a USB console: the vendor kernel has the sunxi
+UDC (`/sys/class/udc/5100000.udc-controller`), libcomposite and the configfs gadget
+(`/sys/kernel/config/usb_gadget/g1`, idVendor 0x1f3a / idProduct 0x1001, config `c.1`, no
+functions) built in, and **exactly one function driver: `usb_f_acm`** (CDC-ACM serial; `mkdir
+functions/acm.usb0` works, every other function name fails -- ecm, rndis, ncm, eem, serial, ffs,
+mass_storage, hid, uac, uvc, mtp...). The OTG role switch `/sys/devices/platform/soc/usbc0/otg_role`
+boots as `usb_host` and accepts `usb_device`. So no kernel module is needed for a console:
+function + link into `c.1` + role + `echo 5100000.udc-controller > UDC` gives `/dev/ttyGS0`
+(verified step by step with `tools/usb-ko/usbtest.sh`; the UDC reports `not attached` until a host
+is on the cable). `rust/t2cd/src/usb.rs` does exactly that behind `/mnt/UDISK/t2c_usb`
+(phone page `t2c.cgi?a=flag&f=usb&v=1`): gadget strings Carlinkit / T2C / <wlan0 mac>, acm
+function, role, bind, then a root `/bin/sh -i` on `/dev/ttyGS0` (respawned when it exits);
+removing the flag unbinds and returns the port to host mode. The port is also the adapter's
+power input, so "plug into a laptop" means a reboot powered by the laptop -- the flag lives in
+UDISK and survives that. macOS needs no driver: `/dev/cu.usbmodem<serial>`; `tools/usbserial.py`
+(`ports`, `cmd '...'`, `shell`, `flash IMAGE`) finds the port by the T2C descriptor, runs
+commands, or pushes an image: the shell is put in raw mode, `head -c SIZE > /tmp/update.tmp`
+takes the bytes, md5 is compared, the file is renamed to `/tmp/update.img` (what the vendor
+`index.cgi?id=upload` does; the updater watches that name) and `ly_update_status` is polled.
+In a car the flag must stay off: the Tesla's USB port is a host and would see a CDC-ACM device.
+26101723 adds the switches: phone page System card "USB console" (flag `usb`), CarPlay page
+Settings › System "USB console" (page cmd 11/12 -> t2cui writes/removes the flag; `usb` in the
+init JSON), and the watchdog's rescue: `/tmp/t2c_usb_rescue` (hostapd relaunched twice in a row,
+hostapd given up, or the radio-hang detector) makes t2cd bring the console up until the next
+reboot without touching the persistent flag. Still unverified from a laptop at the time of
+writing: the UDC stayed "not attached" with the adapter on a USB-C hub (TI 0x451) -- cable
+orientation / a USB-A-to-C cable are the next things to try; the DT says `usb_port_type = 1`
+(host) with no VBUS/ID pins, so detection is purely the role switch plus the host's bus reset.
+
+Kernel modules do load, with the right config. For anything beyond ACM (USB Ethernet =
+`u_ether`+`usb_f_ecm`/`rndis`, FunctionFS for adb) the function drivers have to be cross-built
+for this exact kernel; the recipe that got a module running (`hello.ko` printed from the kernel):
+HandsomeMod/linux-allwinner-4.9 (4.9.118, `arch/arm/boot/dts/sun8iw19p1.dtsi`), Ubuntu 18.04
+arm64 container with `gcc-arm-linux-gnueabihf` 7.5, `sun8iw19p1smp_defconfig` plus the fragment in
+`tools/usb-ko/frag.cfg`: THUMB2_KERNEL=y (vermagic `4.9.118 preempt ARMv7 thumb2 p2v8`, `touch
+.scmversion` so no `+`), KALLSYMS=n (no /proc/kallsyms), MODULE_UNLOAD=n (no refcnt attr),
+MODULE_SRCVERSION_ALL=y, DEBUG_PREEMPT=n (the kernel exports no `preempt_count_add`), BUG=n (no
+`warn_slowpath_*`), **DEBUG_MUTEXES=y** -- that one cost two power cycles: without it
+`offsetof(struct module, init)` is 208 instead of the kernel's 216 (read from the vendor
+`8821cs.ko`: its `.rel.gnu.linkonce.this_module` puts `init_module` at 0xd8), the kernel jumps
+through garbage and hangs silently (sizeof stays 320 either way, 64-byte aligned). Also PM=n
+(no /sys/power), CGROUPS/QUOTA/KEYS/SYSRQ/PERF/SECCOMP/STACKTRACE=n, NET_SCHED/XFRM/IP_MROUTE=y.
+With that, `usb_f_acm/serial/fs`, `u_ether`, `usb_f_ecm/rndis/mass_storage` build and resolve
+every import against the kernel's exports (`/tmp/t2c-kbuild/*.ko` on the build Mac, not shipped; recipe in `tools/usb-ko/`). Open before trusting
+`u_ether`: the vendor driver's code shows `netdev_priv()` at 1088 (ours 1056) and `skb->data` at
+180 (ours 164) -- `struct device`/`sk_buff` options still differ (candidates: NF_CONNTRACK +
+BRIDGE_NETFILTER (+8 in skb), IOMMU/MSI fields in `struct device`). `panic_on_oops=1` before an
+insmod test turns a hang into a 20 s reboot.
+
+## USB device mode (adb) for bench work (2026-10-16, superseded above)
 
 The adapter's USB port is dual-role: `/sys/devices/platform/soc/usbc0/otg_role` is `usb_host` at
 boot (lyLink.sh runs `/bin/setusbconfig none`), there is a device controller

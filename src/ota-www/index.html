@@ -85,6 +85,13 @@ if (/Tesla/.test(navigator.userAgent) && location.port !== '8080') { location.re
         <button class="btn" id="btn-ui-stock" data-i18n="sys.ui_stock"></button>
       </div>
     </div>
+    <div class="row" id="row-usb">
+      <div class="row-main"><div class="row-title" data-i18n="sys.usb"></div><div class="hint" data-i18n="sys.usb_hint"></div></div>
+      <div class="actions">
+        <button class="btn" id="btn-usb-on" data-i18n="sys.usb_on"></button>
+        <button class="btn" id="btn-usb-off" data-i18n="sys.usb_off"></button>
+      </div>
+    </div>
     <details class="diag"><summary data-i18n="sys.diag"></summary>
       <div class="diag-btns" id="diag-btns"></div>
       <pre id="diag-out"></pre>
