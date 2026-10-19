@@ -901,6 +901,21 @@ answered 200 with an HTML body and no header, which connman reads as a captive p
 Tesla showed "this network tried to show a login page that may require authentication, payment
 or terms agreement" on every connection. 26101719 sends the header (`http.rs`).
 
+## Car "no internet" on the hotspot = ip_forward never set (fixed in 26101719)
+
+Found in the car 2026-10-19 night with DNS query logging (`t2c_dnsdebug`): the Tesla's online
+check resolves `connman.vn.tesla.services` (CloudFront; plain HTTP `GET /online/status.html`,
+200 with an empty HTML page, no `X-ConnMan-Status` header from the real server) every ~30 s and
+the forwarder answered it correctly through the PAN, but `/proc/sys/net/ipv4/ip_forward` was 0:
+t2cui's `pan_ip_forward()` ran stock's `echo 1 > /proc/sys/net/ipv4/ip_forward` through
+`sh -c "... >/dev/null 2>&1"`, and with two stdout redirections the last one wins, so the file
+was never written. Everything else of stock's PAN sequence (udhcpc, MASQUERADE, FORWARD ACCEPT) was
+in place, DNS worked because t2cd queries upstream from the adapter itself, so the symptom was
+"DNS fine, TCP from any hotspot client dead": the car reported no internet (and kept using LTE),
+the Mac roamed off AutoKit every minute or two. 26101719 writes the file from Rust, logs
+`gocsdk: ip_forward=1`, exposes `fwd` in `/health`, and the watchdog sets it back to 1 whenever
+`/tmp/lylink_btpan` exists and it reads 0. Manual check: `cat /proc/sys/net/ipv4/ip_forward`.
+
 ## Rust UI is the default (26101719); `/mnt/UDISK/t2c_ui_stock` brings the vendor UI back
 
 From 26101719 `app/lyLoadModule.sh` starts `app/t2cui` on every adapter; the vendor `tesla -s`

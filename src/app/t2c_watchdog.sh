@@ -215,6 +215,10 @@ while :; do
 		fi
 	fi
 	shell_check
+	# the PAN is up (lylink_btpan) but the kernel does not forward: the hotspot has no internet
+	if [ -e /tmp/lylink_btpan ] && [ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null)" != 1 ]; then
+		echo 1 > /proc/sys/net/ipv4/ip_forward 2>/dev/null && log "ip_forward was off with the PAN up: set 1"
+	fi
 	[ $((tick % 2)) -eq 0 ] && radio_check
 	[ $((tick % 4)) -eq 0 ] && health
 	if [ $crash_reset -eq 0 ] && [ "$now" -ge 1800 ]; then

@@ -237,7 +237,10 @@ impl Gocsdk {
                 self.log.log(&format!("gocsdk: PAN up ({}), running udhcpc on bt-pan", line));
                 self.pan_up.store(true, Ordering::Relaxed);
                 self.bt_connected.store(true, Ordering::Relaxed);
-                pan_ip_forward();
+                match pan_ip_forward() {
+                    Ok(()) => self.log.log(&format!("gocsdk: ip_forward={}", if ip_forward_on() { 1 } else { 0 })),
+                    Err(e) => self.log.log(&format!("gocsdk: ip_forward write failed: {}", e)),
+                }
             }
             "ND" => {
                 self.log.log(&format!("gocsdk: {} (PAN already connected)", line));
@@ -322,17 +325,16 @@ impl Gocsdk {
 
     pub fn health_json(&self) -> String {
         let counts: Vec<String> = self.counts.lock().unwrap_or_else(|e| e.into_inner()).iter().map(|(k, v)| format!("\"{}\": {}", k, v)).collect();
-        format!("{{\"on\": {}, \"bt\": {}, \"pan\": {}, \"lines\": {}, \"muted\": {}, \"codes\": {{{}}}, \"last\": {}}}", self.bt_on.load(Ordering::Relaxed), self.bt_connected.load(Ordering::Relaxed), self.pan_up.load(Ordering::Relaxed), self.lines.load(Ordering::Relaxed), self.muted.load(Ordering::Relaxed), counts.join(", "), crate::protocol::js(&self.last_line.lock().unwrap_or_else(|e| e.into_inner())))
+        format!("{{\"on\": {}, \"bt\": {}, \"pan\": {}, \"fwd\": {}, \"lines\": {}, \"muted\": {}, \"codes\": {{{}}}, \"last\": {}}}", self.bt_on.load(Ordering::Relaxed), self.bt_connected.load(Ordering::Relaxed), self.pan_up.load(Ordering::Relaxed), ip_forward_on(), self.lines.load(Ordering::Relaxed), self.muted.load(Ordering::Relaxed), counts.join(", "), crate::protocol::js(&self.last_line.lock().unwrap_or_else(|e| e.into_inner())))
     }
 }
 
 /// Stock `btpan_ipForward`, verbatim: DHCP on bt-pan, forwarding, nat out of bt-pan. The nat
 /// flush drops t2cd's udp/53 REDIRECT too; its keeper puts it back within 20 s.
-pub fn pan_ip_forward() {
+pub fn pan_ip_forward() -> std::io::Result<()> {
     for cmd in [
         "killall udhcpc",
         "udhcpc -R -n -b -i bt-pan",
-        "echo 1 > /proc/sys/net/ipv4/ip_forward",
         "iptables -F",
         "iptables -t nat -F",
         "iptables -P INPUT ACCEPT",
@@ -341,5 +343,16 @@ pub fn pan_ip_forward() {
     ] {
         crate::status::sh(&format!("{} >/dev/null 2>&1", cmd));
     }
+    // written directly: `echo 1 > ip_forward >/dev/null` through sh leaves the file untouched (the
+    // last redirection wins), which is how 26101709..19 left the hotspot without internet.
+    let r = std::fs::write(IP_FORWARD, "1\n");
     crate::status::sh("touch /tmp/lylink_btpan");
+    r
+}
+
+const IP_FORWARD: &str = "/proc/sys/net/ipv4/ip_forward";
+
+/// True when the kernel forwards (the car's and the phone's internet through the PAN).
+pub fn ip_forward_on() -> bool {
+    std::fs::read_to_string(IP_FORWARD).map(|s| s.trim() == "1").unwrap_or(false)
 }
