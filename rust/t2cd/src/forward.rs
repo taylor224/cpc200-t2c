@@ -2,7 +2,11 @@
 //! rule redirects their port-53 queries here), one towards the upstream resolvers.
 //!
 //! Decision per query:
-//!   * table names (carplay.internal, setting.internal, the stock tespush names) → answered here;
+//!   * table names (carplay.internal, setting.internal, the stock tespush names, and the Tesla's
+//!     connectivity-check host connman.vn.tesla.services) → answered here, online or not: the
+//!     car's `GET /online/status.html` lands on the UI, which answers `X-ConnMan-Status: online`,
+//!     so the car keeps the hotspot "online" (and routes to the UI through it) whatever the
+//!     Bluetooth PAN is doing at that moment (it loses packets in bursts of several seconds);
 //!   * any other name while the adapter has internet (a default route that is not wlan0, i.e. the
 //!     Bluetooth PAN to the phone) → forwarded to the resolvers udhcpc wrote to /etc/resolv.conf,
 //!     then 8.8.8.8 and 1.1.1.1 (always appended: the phone's resolver is slow and lossy over
@@ -271,7 +275,8 @@ impl Forwarder {
             | "tespush.com"
             | "www.tespush.com"
             | "tespush.cn"
-            | "www.tespush.cn" => Some(self.cfg.tesla_ip),
+            | "www.tespush.cn"
+            | "connman.vn.tesla.services" => Some(self.cfg.tesla_ip),
             "setting.internal" | "settings.internal" | "www.setting.internal" => {
                 Some(self.cfg.settings_ip)
             }
@@ -593,6 +598,11 @@ mod tests {
         assert_eq!(
             a_record(&ask(srv, "setting.internal")),
             Some([192, 168, 3, 1])
+        );
+        // the car's connectivity-check host is local even while online
+        assert_eq!(
+            a_record(&ask(srv, "connman.vn.tesla.services")),
+            Some([101, 200, 208, 6])
         );
         // forwarded: first upstream silent, second answers; the silent one is then penalised
         let t0 = Instant::now();

@@ -916,6 +916,16 @@ the Mac roamed off AutoKit every minute or two. 26101719 writes the file from Ru
 `gocsdk: ip_forward=1`, exposes `fwd` in `/health`, and the watchdog sets it back to 1 whenever
 `/tmp/lylink_btpan` exists and it reads 0. Manual check: `cat /proc/sys/net/ipv4/ip_forward`.
 
+Second finding the same night, with forwarding on: the PAN to the iPhone loses packets in bursts
+(`ping 172.20.10.1` from the adapter: 11 of 20 lost, misses in runs of 5-6 s; one ~2 min window
+where all three resolvers were silent and every hotspot client got SERVFAIL) while the CPU is 92 %
+idle and gocsdk is quiet, so the car's online check through the PAN fails whenever a burst hits
+and the car falls back to LTE (then the UI address is unreachable for it). 26101720 therefore
+answers `connman.vn.tesla.services` from the table in both modes -- the stock experience, where the
+catch-all was effectively always on -- so the car stays "online" on the hotspot regardless of the
+PAN; the PAN burst loss itself (iPhone hotspot over Bluetooth, same under stock as far as known) is
+open.
+
 ## Rust UI is the default (26101719); `/mnt/UDISK/t2c_ui_stock` brings the vendor UI back
 
 From 26101719 `app/lyLoadModule.sh` starts `app/t2cui` on every adapter; the vendor `tesla -s`
