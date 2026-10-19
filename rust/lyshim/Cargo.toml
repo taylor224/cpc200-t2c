@@ -1,0 +1,16 @@
+[package]
+name = "lyshim"
+version = "0.1.0"
+edition = "2021"
+description = "Carlinkit T2C: dynamic musl probe that drives the vendor liblylinkui (rewrite P2 shim)"
+license = "MIT"
+publish = false
+
+[dependencies]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -19,11 +19,14 @@
 # (key=value lines, `;` works as a separator) is appended to the 80/40 MHz files, replacing
 # generated keys of the same name (experiments, e.g. country_code=KR;ieee80211d=1).
 #
-# lylinkui itself restarts hostapd: 120 s after the CarPlay video stops with no car display
-# attached it runs `killall hostapd` ("ly_misc_thread sleeping"), sleeps 60 s and launches it
-# again ("wake up"); the phone connecting over Bluetooth while the AP is down does the same.
-# Every relaunch re-enters this script, so "a station is associated" is read from the driver's
-# station table at check time, never from "new since we started".
+# Stock lylinkui stopped hostapd 120 s after the last phone/page/video went away ("ly_misc_thread
+# sleeping") and only started it again when the phone came back over Bluetooth ("wake up"); since
+# 26101701 that sleep is patched out (tools/patch_lylinkui.py, patch 13), so the daemon is only
+# restarted after a channel or password change -- lylinkui runs `killall hostapd` (which also kills
+# the monitor below, whose comm name is "hostapd") and calls this script again. app/t2c_watchdog.sh
+# relaunches it when it is missing for 45 s. "A station is associated" is read from the driver's
+# station table at check time, never from "new since we started", because relaunches re-enter here
+# with the clients already there.
 CONF=/tmp/hostapd.conf
 MINE=/tmp/hostapd-t2c.conf
 LOG=/tmp/t2c_hostapd.log
@@ -64,7 +67,7 @@ conf_for() {   # $1 = 80 | 40 | stock -> path of the file to start with
 # PID of the daemon started with config $1. Never `killall hostapd`/`pidof hostapd` here: busybox
 # matches the comm name, and the comm of a #!/bin/sh script is its basename, i.e. the monitor
 # itself is called "hostapd" and would be killed before it can start the stock daemon.
-daemon_pid() { ps 2>/dev/null | grep -v grep | grep "hostapd .*$1" | awk '{print $1}' | head -n 1; }
+daemon_pid() { ps 2>/dev/null | grep -v -e grep -e '/bin/sh' -e 'sh -c' -e '--monitor' | grep "hostapd .*$1" | awk '{print $1}' | head -n 1; }
 alive() { [ -n "$(daemon_pid "$1")" ]; }
 
 # start the daemon with config $1; 0 when hostapd accepted the file. The rootfs hostapd has no -f
@@ -74,7 +77,8 @@ start_daemon() {
 		"$REAL" -t -dd "$1" > "$HLOG" 2>&1 < /dev/null &
 		sleep 1; alive "$1"
 	else
-		"$REAL" -B "$1" >> "$LOG" 2>&1
+		"$REAL" -B "$1" >> "$LOG" 2>&1 || return 1
+		sleep 1; alive "$1"
 	fi
 }
 
@@ -164,13 +168,25 @@ MODES='40 stock'
 [ "$FAILS" -ge 2 ] && MODES='stock'
 set_country
 
-[ -f "$WD" ] && kill "$(cat "$WD")" 2>/dev/null; rm -f "$WD"
+if [ -f "$WD" ]; then
+	p=$(cat "$WD" 2>/dev/null)
+	case "$p" in [0-9]*) tr '\000' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q -- '--monitor' && kill "$p" 2>/dev/null ;; esac
+	rm -f "$WD"
+fi
 
+tries=0
 while :; do
 	mode=${MODES%% *}
 	if launch "$mode"; then break; fi
 	log "hostapd refused mode=$mode"
-	rest=${MODES#* }; [ "$rest" = "$MODES" ] && exit 1
+	rest=${MODES#* }
+	if [ "$rest" = "$MODES" ]; then
+		# even the stock file failed: the interface may still be busy from the daemon that was just
+		# killed -- try again a few times rather than leaving the adapter without Wi-Fi
+		tries=$((tries + 1))
+		[ $tries -ge 4 ] && { log "giving up after $tries attempts"; exit 1; }
+		sleep 3; MODES=stock; continue
+	fi
 	MODES=$rest
 done
 "$HERE/hostapd" --monitor "$MODES" "$CH" "$HT" "$SEG" "$FAILS" < /dev/null > /dev/null 2>&1 &

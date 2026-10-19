@@ -5,12 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta http-equiv="Cache-Control" content="no-store">
-<title>TesPush T2C</title>
+<script>/* The car browser typed 192.168.3.1: this page is for phones, the CarPlay page lives on the Rust UI's plain-IP port */
+if (/Tesla/.test(navigator.userAgent) && location.port !== '8080') { location.replace('http://' + location.hostname + ':8080/'); }</script>
+<title>Carlinkit T2C</title>
 <link rel="stylesheet" href="/css/ota.css">
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="brand-name">CARPLAY</span><span class="brand-sub">TesPush T2C</span></div>
+  <div class="brand"><span class="brand-name">CARPLAY</span><span class="brand-sub">Carlinkit T2C</span></div>
   <select id="lang" class="lang" aria-label="Language">
     <option value="auto">Auto</option>
     <option value="en">English</option>
@@ -102,8 +104,13 @@
       <p class="hint" id="sw-eta"></p>
     </div>
   </section>
+  <section class="card" id="carplay-link">
+    <div class="actions"><a class="btn btn-primary" id="btn-carplay" href="/">Go to CarPlay</a></div>
+    <p class="hint">CarPlay page on this adapter (port 8080): open it from the car browser or any device on the hotspot.</p>
+  </section>
   <footer class="foot" id="foot"></footer>
 </main>
+<script>document.getElementById('btn-carplay').href = 'http://' + location.hostname + ':8080/';</script>
 <div id="toast" class="toast hidden"></div>
 <div id="modal" class="modal hidden"><div class="modal-box"><p id="modal-text"></p>
   <div class="actions"><button class="btn" id="modal-cancel" data-i18n="cancel"></button><button class="btn btn-primary" id="modal-ok" data-i18n="ok"></button></div></div></div>

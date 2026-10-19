@@ -24,9 +24,11 @@ The easiest way is the installer page: **https://taylor224.github.io/cpc200-t2c/
    the firmware and reboots again (its Wi‑Fi disappears for ~30 s in the middle).
 
 Afterwards `http://192.168.3.1` (or `http://setting.internal/`) is the new settings page and
-the car browser shows the new CarPlay page at `tespush.com` or `http://carplay.internal/`
-(the adapter's built‑in DNS answers both names; type `http://` or the trailing slash the
-first time so the browser does not run a search). Later updates are one tap: in the car
+the car browser shows the new CarPlay page at `tespush.com` (HTTPS) or — without TLS —
+`http://101.200.208.6/` (the address the adapter answers for on its own Wi‑Fi; works whatever
+DNS the car uses) or `http://carplay.internal/` (needs the car to ask the adapter's DNS, or the
+watchdog's `.internal` redirect — see NOTES; type `http://` or the trailing slash the first time so
+the browser does not run a search). Later updates are one tap: in the car
 *Settings → About → Check for updates*, or on the settings page *Software → Check for
 updates*; both read `updates/1508/version.json` from this repository and install the image
 linked there. While the page on GitHub cannot see the adapter (see below), it shows the
@@ -92,6 +94,24 @@ and a page reload loop on resize. Carlinkit has not shipped a fix.
   stays behind an experiment flag (see NOTES). The wrapper falls back to the stock file when
   hostapd refuses a configuration or no station is associated within five minutes; lylinkui's
   own hostapd restarts (idle sleep, phone reconnect) re-enter it. Bench-tested, not yet in a car.
+- **The CarPlay session survives the car browser.** Closing and reopening the Tesla browser used to
+  stop the session twice (the adapter "took" the screen when the page's socket closed, and the
+  reloaded page made it set the screen up again) and navigation routes were lost each time. Now the
+  adapter leaves a running session alone when the page goes (`tools/patch_lylinkui.py` patches 12/14),
+  the hidden page keeps its socket and only pauses decoding, and coming back costs one key frame. A
+  page that was displaced by another screen reconnects by itself (3 s … 60 s backoff, only while
+  visible) instead of asking; two pages now alternate without restarting CarPlay.
+- The adapter's **Wi‑Fi no longer sleeps**: stock lylinkui killed hostapd two minutes after the last
+  phone/page and only relaunched it when the phone came back over Bluetooth; a failure in that chain
+  left the adapter without Wi‑Fi until a power cycle (patch 13). A watchdog (`src/app/t2c_watchdog.sh`)
+  relaunches gocsdk (Bluetooth) or hostapd when either disappears and writes a health log the phone
+  page can show (`health`, `health_saved`, `watchdog`, `thermal`, `btaudio`).
+- A decoder that cannot keep up (Sharp × Smooth on an Intel-era car) steps down — frame rate to
+  Standard, then picture size to Balanced — before it ever falls back to MJPEG (now for a day, not a
+  week). A Wi‑Fi dropout is no longer mistaken for that: the decoder module is fetched again when
+  the connection is back, frames are ignored until the decoder is ready, and a failed worker is
+  rebuilt instead of being remembered as "this browser cannot decode video". About › *Recent
+  events* keeps the last 80 connection/takeover/restart/step-down events.
 - `lylinkui` no longer piles up the CarPlay video stream while no page is watching (stock
   parked its IPC thread on a condition variable whenever the stream was active but no page had
   asked for video, so the phone's frames queued up inside the process until the kernel's OOM
@@ -155,8 +175,11 @@ cycle: build, rewrite `version.json`, commit, push, GitHub release with the imag
   iPhone → T2C → Tesla over Bluetooth (A2DP for media, HFP for calls/Siri), and the car's
   microphone comes back over the same HFP link. The Tesla browser blocks `getUserMedia`
   at compile time, and the adapter firmware has no audio path over the WebSocket, so
-  intermittent microphone drop‑outs are a Bluetooth stack issue inside the closed
-  `gocsdk`/`libGbtsTask` binaries and cannot be fixed from the web UI.
+  the microphone path is the Tesla's own Bluetooth link to the iPhone (the adapter's stack has no
+  hands‑free gateway role, so the car never connects to it as to a phone — see NOTES › Audio). Siri
+  switching the car into its phone‑call audio mode is inherent: HFP is Bluetooth's only microphone
+  path (A2DP is one‑way), and the 8 kHz narrowband voice is what the Tesla negotiates with the
+  iPhone; nothing in this firmware can change it.
 - The WebAssembly decoder runs single‑threaded (the adapter's server cannot send the
   COOP/COEP headers needed for threads). Intel‑era cars (MCU2) may not sustain 30 fps
   at the *Sharp* size; use *Balanced* or let Automatic fall back to MJPEG. JPEG quality
@@ -165,6 +188,16 @@ cycle: build, rewrite `version.json`, commit, push, GitHub release with the imag
   The partition is 6,553,600 B on the 16 MiB SPI NOR of the tested unit (236 KB spare), and the
   kernel fills its `boot` partition to within 4 KB — do not add to `kernel`. `tools/flash.sh`
   reads the layout from the adapter's own boot log and refuses to upload an image that does not fit.
+
+## Rust sidecar (`rust/t2cd`)
+
+The first piece of the planned `lylinkui` replacement (`docs/REWRITE-PLAN.md`): a static Rust
+daemon that forwards the car's DNS (`carplay.internal` and `setting.internal` answered locally,
+everything else relayed to the phone's resolvers) and keeps the nat rule that sends the car's
+port‑53 traffic to it. Built with `cargo build --release --target armv7-unknown-linux-musleabihf`
+(no C toolchain), shipped as `app/t2cd` when present, uploadable to the adapter without a flash
+(`rust/README.md`). It also serves the debug shell: flag `t2c_shell` → root shell on tcp/2323 for
+hotspot clients, `tools/shell.py` (the rootfs busybox has no telnetd/nc). Device-tested 2026-10-18.
 
 ## Build
 

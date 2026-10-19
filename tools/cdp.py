@@ -10,7 +10,7 @@ Then run steps in order, e.g.
       --shot /tmp/home.png --eval "document.title" --wait 5 --shot /tmp/stage.png --console
 
 Steps: --metrics WxHxDPR | --goto URL | --wait SEC | --shot FILE | --eval JS | --tap X,Y
-       | --click X,Y | --drag X1,Y1,X2,Y2,MS | --console | --reload
+       | --click X,Y | --drag X1,Y1,X2,Y2,MS | --console | --reload | --cdp METHOD JSON
 """
 import base64, json, os, socket, struct, sys, time, urllib.request, random
 
@@ -185,6 +185,10 @@ def main():
             x, y = v.split(','); c.click(float(x), float(y)); i += 2
         elif a == '--drag':
             x1, y1, x2, y2, ms = v.split(','); c.drag(float(x1), float(y1), float(x2), float(y2), float(ms)); i += 2
+        elif a == '--cdp':
+            # generic command: --cdp Emulation.setCPUThrottlingRate '{"rate": 8}'
+            params = json.loads(args[i + 2]) if i + 2 < len(args) else {}
+            print('cdp:', v, json.dumps(c.call(v, **params))[:200]); i += 3
         elif a == '--console':
             print('console (%d):' % len(c.console))
             for line in c.console:

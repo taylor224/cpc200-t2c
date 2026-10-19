@@ -1,0 +1,16 @@
+[package]
+name = "t2cui"
+version = "0.1.0"
+edition = "2021"
+description = "Carlinkit T2C: the Tesla-browser UI server (HTTP + WebSocket tsl protocol) over the vendor CarPlay library -- replaces lylinkui"
+license = "MIT"
+publish = false
+
+[dependencies]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

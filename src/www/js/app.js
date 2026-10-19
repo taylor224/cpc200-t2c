@@ -50,9 +50,9 @@
     channel: -1, chtmp: 255,
     icon: '', icons: {}, lyver: '',
     btconn: null, btdelay: null, btdel: null,
-    pixel: 3, vid: false,
+    pixel: 3, vid: false, fps: 0,
     carUi: false,          // iPhone asked for the car's own UI (Carlinkit app tapped in CarPlay)
-    elsewhere: false,      // another page connected to the adapter and took over
+    elsewhere: false,      // another page connected to the adapter and took over (retried by itself)
     updating: false, updateUrl: null,
     hasCell: true,
     sessWanted: null,      // session size this page asked for (null = adapter preset)
@@ -110,6 +110,7 @@
     if (recent.length >= 4) { console.warn('reload loop stopped'); toast(t('home.reload_loop'), 8000); return; }
     recent.push(now);
     try { history.replaceState({ t2cReloads: recent }, ''); } catch (e) { /* ignore */ }
+    logEvent('reload');
     location.reload();
   }
 
@@ -117,6 +118,42 @@
     if (link.open) return true;
     confirmReload(t('about.ws_lost'));
     return false;
+  }
+
+  /* ----------------------------------------------------------- event log */
+
+  /* What happened in the car can be read afterwards: the last EVENTS_MAX connection, takeover,
+   * step-down and session events stay in localStorage (About › Recent events). */
+  var EVENTS_MAX = 80;
+  function logEvent(kind, detail) {
+    var list = store.get('events', []);
+    if (!Array.isArray(list)) list = [];
+    list.push({ t: Date.now(), k: kind, d: detail === undefined || detail === null ? '' : String(detail) });
+    while (list.length > EVENTS_MAX) list.shift();
+    store.set('events', list);
+    console.log('[t2c] ' + kind + (detail !== undefined && detail !== null ? ' ' + detail : ''));
+  }
+  function eventsDialog() {
+    var list = store.get('events', []);
+    if (!Array.isArray(list)) list = [];
+    var pre = document.createElement('pre'); pre.className = 'events';
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    pre.textContent = list.length ? list.slice().reverse().map(function (e) {
+      var d = new Date(e.t);
+      return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '  ' + e.k + (e.d ? '  ' + e.d : '');
+    }).join('\n') : t('about.events_none');
+    dialog({ title: t('about.events'), content: pre,
+      buttons: [{ label: t('about.events_clear'), onClick: function () { store.set('events', []); } }, { label: t('dlg.ok'), primary: true }] });
+  }
+
+  // The iPhone sends an IDR only when asked; at most one request a second, but a request
+  // that arrives inside that second is sent when it is over, never dropped.
+  var keyTimer = 0, keyPending = false;
+  function requestKeyframe() {
+    if (keyTimer) { keyPending = true; return; }
+    keyPending = false;
+    keyTimer = setTimeout(function () { keyTimer = 0; if (keyPending) requestKeyframe(); }, 1000);
+    if (state.link > 1) link.cmd(CMD.KEYFRAME);
   }
 
   function segSet(id, value) {
@@ -196,11 +233,12 @@
 
   /* ------------------------------------------------------- transport */
 
-  var H264_SLOW_TTL = 7 * 86400 * 1000;   // a decoder that cannot keep up: stay on MJPEG for a week
+  var H264_SLOW_TTL = 86400 * 1000;       // a decoder that cannot keep up even at Balanced/Standard: MJPEG for a day
   var H264_ERROR_TTL = 3600 * 1000;       // a crash or a lost GPU context: try again in an hour
 
+  var videoHeld = 0;    // transient decoder trouble: Picture for this session, Video retried later
   function wantVideo() {
-    if (!VideoPresenter.canH264() || (presenter && presenter.broken)) return false;
+    if (!VideoPresenter.canH264() || (presenter && presenter.broken) || videoHeld) return false;
     if (prefs.transport === 'video') return true;
     if (prefs.transport === 'picture') return false;
     var until = store.get('h264slow', 0);   // expiry; older builds stored the verdict time, long past
@@ -221,8 +259,51 @@
     }
   }
 
-  function h264Failed(reason) {
-    console.warn('h264 fallback:', reason);
+  /* The browser cannot decode this many pixels per second (Sharp × Smooth on an Intel-era car, for
+   * instance). Give up frame rate first (same sharpness), then picture size; only when Balanced at the
+   * standard rate is still too much does the page fall back to MJPEG, for a day rather than a week.
+   * Before this, Smooth could drive the page into MJPEG-for-a-week and a session restart after 10–30
+   * minutes of driving, once the map started moving for good. */
+  var transientFails = [];
+  function h264Failed(reason, transient) {
+    console.warn('h264 fallback:', reason, transient ? '(transient)' : '');
+    if (transient) {
+      // The browser is fine; the Wi-Fi was away while the decoder module loaded, the worker script
+      // did not load, or the GPU context never came back. Rebuild the worker (fresh canvas) a few
+      // times; only then show the picture over MJPEG — for a while, not for a day — and never
+      // remember it as "this browser cannot decode video".
+      var now = Date.now();
+      transientFails = transientFails.filter(function (ts) { return now - ts < 600000; });
+      transientFails.push(now);
+      logEvent('decoder-transient', reason + ' (' + transientFails.length + ')');
+      if (transientFails.length <= 3) {
+        setTimeout(function () {
+          if (state.link > 1 && state.vid && !presenter.worker && !presenter.broken && !document.hidden) presenter.startH264();
+        }, 1500 * transientFails.length);
+        return;
+      }
+      toast(t('video.transient'), 7000);
+      clearTimeout(videoHeld);
+      videoHeld = setTimeout(function () { videoHeld = 0; logEvent('decoder-retry', 'video again'); applyTransport(false); }, 600000);
+      applyTransport(true);
+      return;
+    }
+    if (reason === 'slow' && link.open) {
+      if (state.fps === 1) {
+        logEvent('slow', 'frame rate smooth -> standard');
+        state.fps = 0; link.setKey(KEY.FPS, 0); segSet('seg-fps', 0);     // the adapter restarts the session
+        toast(t('video.fps_lowered'), 7000);
+        return;
+      }
+      if (prefs.res === 'sharp') {
+        logEvent('slow', 'picture size sharp -> balanced');
+        prefs.res = 'balanced'; store.set('res', 'balanced'); store.set('sessAuto', false); segSet('seg-res', 'balanced');
+        toast(t('video.res_lowered'), 7000);
+        applySession(true);
+        return;
+      }
+    }
+    logEvent('h264-fallback', reason);
     store.set('h264slow', Date.now() + (reason === 'slow' ? H264_SLOW_TTL : H264_ERROR_TTL));
     toast(t(reason === 'slow' ? 'video.slow' : 'video.unsupported'), 5000);
     if (prefs.transport === 'video') { prefs.transport = 'auto'; store.set('transport', 'auto'); segSet('seg-mode', 'auto'); }
@@ -237,7 +318,7 @@
 
   function switchVideo(newLink) {
     if (newLink === state.link) return;
-    console.log('link ' + state.link + ' -> ' + newLink);
+    logEvent('link', state.link + ' -> ' + newLink + (state.phone ? ' phone' : ''));
     var prev = state.link;
     state.link = newLink;
     // 2 -> 1 while the phone stays connected means the user opened the Carlinkit app
@@ -283,7 +364,9 @@
     open.hidden = true; steps.classList.remove('hidden');
     $('btn-use-here').hidden = !state.elsewhere;
     if (state.elsewhere) {
-      txt.textContent = t('home.elsewhere'); steps.classList.add('hidden');
+      var secs = takeoverDeadline ? Math.max(0, Math.ceil((takeoverDeadline - Date.now()) / 1000)) : 0;
+      txt.textContent = t('home.elsewhere') + (secs ? ' · ' + t('home.retry_in', { s: secs }) : '');
+      spin.classList.remove('hidden'); dot.classList.add('hidden'); steps.classList.add('hidden');
     } else if (state.link > 1) {
       txt.textContent = t('home.connected'); dot.classList.add('ok'); open.hidden = false; steps.classList.add('hidden');
     } else if (state.link === 1 && state.carUi) {
@@ -349,9 +432,11 @@
     }
     if (prefs.res === 'device' || store.get('sessAuto', false)) {
       state.sessRestartAt = Date.now();
+      logEvent('restart', 'reload (auto flow)');
       setTimeout(reload, 400);
       return;
     }
+    logEvent('restart', 'pixel ' + state.pixel + ' -> ' + (state.pixel === 0 ? 1 : 0));
     setPixel(state.pixel === 0 ? 1 : 0);
   }
 
@@ -703,8 +788,12 @@
     state.lyver = (j.LY || '').split('.')[1] || '';
     state.channel = j.ch; state.chtmp = j.sh;
     state.pixel = j.pixel;
+    state.fps = j.fps | 0;
+    state.phone = !!j.phone;
     state.icon = j.icon || ''; state.icons = j.icons || {};
     state.night = j.night;
+    logEvent('init', 'link ' + j.link + (j.phone ? ' phone' : '') + ' ' + (j.SW || ''));
+    takeoverSettled();
 
     // language: server index is only a hint
     if (I18N.isAuto()) { I18N.init(j.lan); }
@@ -750,9 +839,10 @@
   }
 
   function onLinkMsg(j) {
+    state.phone = !!j.phone;
     // The adapter can push {link,phone} before the init JSON; the transport (MJPEG vs
     // H.264) is only known after init, which calls switchVideo(j.link) itself.
-    if (!state.init) { state.phone = !!j.phone; return; }
+    if (!state.init) return;
     if (state.linking) {
       if (j.link > 0 || !j.phone) setLinking(false);
     } else if (j.phone && j.link < 1) {
@@ -761,16 +851,84 @@
     switchVideo(j.link);
   }
 
-  /** Another page (other browser, tab or device) now owns the adapter's connection. */
+  /** Another page (other browser, tab or device) now owns the adapter's connection — or lylinkui's
+   *  status thread stalled while its HTTP side kept answering, which looks the same from here.
+   *  Nothing to ask: the car screen takes the adapter back by itself after a pause that grows
+   *  while the other page keeps winning (a forgotten tab on a phone), and only while this page is
+   *  visible. Since the adapter neither restarts the CarPlay session on a hello nor stops it when a
+   *  socket closes (26101701), a takeover costs the other page its picture and nothing else. */
+  var TAKEOVER_WAIT = [3, 5, 10, 20, 30, 60];
+  var takeoverTimer = 0, takeoverN = 0, takeoverDeadline = 0, takeoverTick = 0, stableTimer = 0;
   function onSuperseded() {
-    console.warn('adapter taken over by another page');
+    logEvent('superseded', 'retry ' + (takeoverN + 1));
     if (state.updating) { updateFailed(); return; }
+    clearTimeout(stableTimer); stableTimer = 0;
     state.elsewhere = true;
     switchVideo(-1);
     stopVideo(); showPage('home');
+    scheduleTakeover();
+  }
+  function scheduleTakeover() {
+    clearTimeout(takeoverTimer); clearInterval(takeoverTick);
+    var wait = TAKEOVER_WAIT[Math.min(takeoverN, TAKEOVER_WAIT.length - 1)];
+    takeoverDeadline = Date.now() + wait * 1000;
     renderHomeStatus();
-    dialog({ title: t('home.elsewhere'), text: t('home.elsewhere_hint'),
-      buttons: [{ label: t('dlg.cancel') }, { label: t('home.use_here'), primary: true, onClick: reload }] });
+    takeoverTick = setInterval(renderHomeStatus, 1000);
+    takeoverTimer = setTimeout(function () {
+      takeoverTimer = 0; clearInterval(takeoverTick); takeoverTick = 0; takeoverDeadline = 0;
+      if (!state.elsewhere) return;
+      if (document.hidden) { renderHomeStatus(); return; }    // retried when Tesla shows the page again
+      takeover();
+    }, wait * 1000);
+  }
+  function takeover() {
+    clearTimeout(takeoverTimer); takeoverTimer = 0; clearInterval(takeoverTick); takeoverTick = 0; takeoverDeadline = 0;
+    takeoverN++;
+    logEvent('takeover', 'attempt ' + takeoverN);
+    renderHomeStatus();
+    link.connect();
+  }
+  /** A connection delivered its init JSON: the takeover is over; a minute of it resets the backoff. */
+  function takeoverSettled() {
+    if (state.elsewhere) { state.elsewhere = false; renderHomeStatus(); }
+    clearTimeout(takeoverTimer); takeoverTimer = 0; clearInterval(takeoverTick); takeoverTick = 0; takeoverDeadline = 0;
+    clearTimeout(stableTimer);
+    stableTimer = setTimeout(function () { stableTimer = 0; takeoverN = 0; }, 60000);
+  }
+
+  /* ---------------------------------------------- background / foreground */
+
+  /* Tesla hides the page when the browser is closed and shows it again when it is reopened. The
+   * CarPlay session must survive that: with an iPhone attached the WebSocket stays open (the adapter
+   * then changes nothing) and only decoding pauses; without one the socket is closed so the adapter
+   * can stop its own menu stream. Coming back costs one key frame — no reload, no session restart,
+   * no lost navigation route. Until 26101701 the page closed the socket (which made the adapter stop
+   * the session) and reloaded itself on return (a second restart). */
+  var resumeCheck = 0;
+  function onHidden() {
+    logEvent('hidden', 'link ' + state.link + (link.open ? '' : ' (not connected)'));
+    clearTimeout(resumeCheck); resumeCheck = 0;
+    if (presenter.mode === 'h264') presenter.pause(); else presenter.stop();
+    if (!state.phone) link.close();          // no iPhone: let the adapter stop its menu stream
+  }
+  function onVisible() {
+    logEvent('visible', 'link ' + state.link + (link.open ? '' : ' reconnect'));
+    if (state.elsewhere) { takeover(); return; }
+    if (!link.open) { link.connect(); return; }         // init JSON + switchVideo bring the picture back
+    if (state.link > 1) {
+      if (presenter.mode === 'h264') { presenter.resume(); requestKeyframe(); armResumeCheck(); }
+      else startVideo();
+    }
+  }
+  /** No frame within 5 s of coming back although the stream should run: reconnect instead of staring. */
+  function armResumeCheck() {
+    clearTimeout(resumeCheck);
+    var before = presenter.rxTotal;
+    resumeCheck = setTimeout(function () {
+      resumeCheck = 0;
+      if (document.hidden || state.link <= 1 || !link.open) return;
+      if (presenter.rxTotal === before) { logEvent('resume-stall', 'no frames in 5 s, reconnecting'); link.drop(); }
+    }, 5000);
   }
 
   /* ------------------------------------------------------- language UI */
@@ -863,7 +1021,8 @@
       a.addEventListener('click', function (e) { e.preventDefault(); showPage(a.getAttribute('data-page')); });
     });
     $('btn-reload').onclick = function () { location.reload(); };
-    $('btn-use-here').onclick = function () { location.reload(); };
+    $('btn-use-here').onclick = function () { if (state.elsewhere) takeover(); else location.reload(); };
+    $('btn-events').onclick = eventsDialog;
     $('btn-open-carplay').onclick = function () { if (requireLink()) { state.link = Math.min(state.link, 1); link.cmd(CMD.VIDEO); } };
     $('btn-qr').onclick = function () {
       var card = $('qr-card');
@@ -894,7 +1053,7 @@
       state.pixel = +v; link.setKey(KEY.PIXEL, +v); session.set('sess', sessionSignature(null));
     });
     segBind('seg-uiscale', function (v) { prefs.uiScale = v; store.set('uiScale', v); store.set('sessAuto', false); applySession(true); });
-    segBind('seg-fps', function (v) { if (!requireLink()) return false; link.setKey(KEY.FPS, +v); });
+    segBind('seg-fps', function (v) { if (!requireLink()) return false; state.fps = +v; logEvent('fps', v); link.setKey(KEY.FPS, +v); });
     segBind('seg-fit', function (v) { prefs.fit = v; store.set('fit', v); presenter.setFit(v); });
     segBind('seg-mode', function (v) {
       if (v === 'video' && !VideoPresenter.canH264()) { toast(t('video.unsupported'), 4000); return false; }
@@ -926,6 +1085,11 @@
 
     $('btn-update').onclick = checkUpdate;
     try { localStorage.removeItem('t2c.updateUrl'); } catch (e) { /* older builds stored a server override */ }
+    $('btn-reboot').onclick = function () {
+      if (!requireLink()) return;
+      dialog({ title: t('home.reboot'), text: t('home.reboot_confirm'),
+        buttons: [{ label: t('dlg.cancel') }, { label: t('home.reboot_btn'), danger: true, onClick: function () { logEvent('reboot', 'requested'); link.cmd(CMD.REBOOT); } }] });
+    };
     $('btn-reset').onclick = function () {
       if (!requireLink()) return;
       dialog({ title: t('about.reset'), text: t('about.reset_confirm'),
@@ -947,8 +1111,7 @@
       }, 1000);
     });
     document.addEventListener('visibilitychange', function () {
-      if (document.hidden) { link.close(); presenter.stop(); }
-      else reload();
+      if (document.hidden) onHidden(); else onVisible();
     });
   }
 
@@ -961,15 +1124,6 @@
     segSet('seg-mode', prefs.transport);
     $('stats').checked = !!prefs.stats;
 
-    // The iPhone sends an IDR only when asked; at most one request a second, but a request
-    // that arrives inside that second is sent when it is over, never dropped.
-    var keyTimer = 0, keyPending = false;
-    function requestKeyframe() {
-      if (keyTimer) { keyPending = true; return; }
-      keyPending = false;
-      keyTimer = setTimeout(function () { keyTimer = 0; if (keyPending) requestKeyframe(); }, 1000);
-      if (state.link > 1) link.cmd(CMD.KEYFRAME);
-    }
     presenter = new VideoPresenter({
       canvas: $('cp-canvas'), canvasWorker: $('cp-canvas-worker'), img: $('cp-img'), statsEl: $('stage-stats'), fit: prefs.fit,
       onMessage: function (kind, a, b) {
@@ -980,8 +1134,13 @@
         }
         else if (kind === 'refresh') requestKeyframe();
         else if (kind === 'key') $('stage-msg').classList.add('hidden');
+        else if (kind === 'ready') { $('stage-msg').classList.add('hidden'); if (state.link > 1) requestKeyframe(); }
+        else if (kind === 'loading') {
+          logEvent('decoder-loading', 'attempt ' + a + ' ' + (b || ''));
+          $('stage-msg').textContent = t('video.loading'); $('stage-msg').classList.remove('hidden');
+        }
         else if (kind === 'slow') h264Failed('slow');
-        else if (kind === 'h264error') h264Failed(a);
+        else if (kind === 'h264error') h264Failed(a, b);
       }
     });
     presenter.setStatsVisible(prefs.stats);
@@ -1003,10 +1162,11 @@
         var qr = $('qr'); qr.innerHTML = '';
         try { new QRCode(qr, { text: text, width: 256, height: 256, correctLevel: QRCode.CorrectLevel.M }); } catch (e) { qr.textContent = text; }
       })
-      .on('pingtimeout', function () { if (state.updating) updateFailed(); else if (state.link > 0) switchVideo(-1); })
+      .on('pingtimeout', function () { logEvent('pingtimeout'); if (state.updating) updateFailed(); else if (state.link > 0) switchVideo(-1); })
       .on('superseded', onSuperseded)
-      .on('close', function () { switchVideo(-1); })
-      .on('open', function () { /* hello sent by client */ });
+      .on('close', function (code) { logEvent('close', code === undefined ? 'dropped' : code); switchVideo(-1); })
+      .on('error', function () { logEvent('ws-error'); })
+      .on('open', function () { logEvent('open'); });
 
     link.connect({ w: window.innerWidth, h: window.innerHeight, lang: navigator.language, nav: getTesla() });
   }

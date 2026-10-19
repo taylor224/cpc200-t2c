@@ -25,7 +25,7 @@
   <nav class="nav" id="nav">
     <div class="nav-brand">
       <span class="wordmark">C A R P L A Y</span>
-      <span class="brand-sub">TesPush T2C</span>
+      <span class="brand-sub">Carlinkit T2C</span>
     </div>
     <ul class="nav-list">
       <li><a class="nav-item active" data-page="home" href="#home">
@@ -66,36 +66,6 @@
     <!-- HOME / waiting screen -->
     <section class="page active" id="page-home">
       <div class="hero">
-        <div class="hero-art" aria-hidden="true">
-          <svg viewBox="0 0 320 200" width="100%" height="100%">
-            <defs>
-              <clipPath id="screen-clip"><rect x="110" y="26" width="100" height="148" rx="10"/></clipPath>
-            </defs>
-            <g class="art-waves" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linecap="round">
-              <path d="M86 78a40 40 0 0 0 0 44" class="w1"/>
-              <path d="M72 66a60 60 0 0 0 0 68" class="w2"/>
-              <path d="M234 78a40 40 0 0 1 0 44" class="w1"/>
-              <path d="M248 66a60 60 0 0 1 0 68" class="w2"/>
-            </g>
-            <g class="art-phone">
-              <rect x="104" y="18" width="112" height="164" rx="18" fill="var(--surface)" stroke="var(--art-stroke)" stroke-width="2.5"/>
-              <rect x="110" y="26" width="100" height="148" rx="10" fill="var(--art-screen)"/>
-              <g clip-path="url(#screen-clip)">
-                <rect x="118" y="36" width="20" height="20" rx="5" fill="var(--blue)"/>
-                <rect x="150" y="36" width="20" height="20" rx="5" fill="#1fb05a"/>
-                <rect x="182" y="36" width="20" height="20" rx="5" fill="#ff9f0a"/>
-                <rect x="118" y="68" width="20" height="20" rx="5" fill="#ff375f"/>
-                <rect x="150" y="68" width="20" height="20" rx="5" fill="#5e5ce6"/>
-                <rect x="182" y="68" width="20" height="20" rx="5" fill="#30d158"/>
-                <rect x="118" y="100" width="20" height="20" rx="5" fill="#64d2ff"/>
-                <rect x="150" y="100" width="20" height="20" rx="5" fill="#bf5af2"/>
-                <rect x="182" y="100" width="20" height="20" rx="5" fill="#8e8e93"/>
-                <rect x="118" y="146" width="84" height="18" rx="9" fill="var(--art-stroke)" opacity="0.25"/>
-              </g>
-              <rect x="146" y="22" width="28" height="4" rx="2" fill="var(--art-stroke)" opacity="0.5"/>
-            </g>
-          </svg>
-        </div>
 
         <h1 class="hero-title" data-i18n="home.title">CarPlay</h1>
         <p class="hero-sub" data-i18n="home.subtitle"></p>
@@ -105,6 +75,9 @@
           <span class="dot" id="home-dot"></span>
           <span id="home-status-text" data-i18n="home.waiting"></span>
         </div>
+        <div class="hero-top">
+          <button class="btn btn-primary btn-xl" id="btn-open-carplay" data-i18n="home.open_carplay" hidden></button>
+        </div>
 
         <ol class="steps" id="home-steps">
           <li><span class="step-n">1</span><span data-i18n="home.step1"></span></li>
@@ -113,7 +86,6 @@
         </ol>
 
         <div class="hero-actions">
-          <button class="btn btn-primary" id="btn-open-carplay" data-i18n="home.open_carplay" hidden></button>
           <button class="btn btn-primary" id="btn-use-here" data-i18n="home.use_here" hidden></button>
           <button class="btn btn-secondary" id="btn-qr" data-i18n="home.show_qr"></button>
         </div>
@@ -340,8 +312,8 @@
       </div>
       <div class="group">
         <div class="row">
-          <div class="row-main"><div class="row-title" data-i18n="sys.mic_test"></div></div>
-          <a class="btn btn-secondary btn-sm" href="/mic.html" data-i18n="sys.open_mic_test"></a>
+          <div class="row-main"><div class="row-title" data-i18n="home.reboot"></div><div class="row-hint" data-i18n="home.reboot_hint"></div></div>
+          <button class="btn btn-danger btn-sm" id="btn-reboot" data-i18n="home.reboot_btn"></button>
         </div>
       </div>
     </section>
@@ -360,6 +332,12 @@
         <div class="row"><div class="row-main"><div class="row-title" data-i18n="about.fw"></div></div><div class="row-value mono" id="about-fw"></div></div>
         <div class="row"><div class="row-main"><div class="row-title" data-i18n="about.hw"></div></div><div class="row-value mono" id="about-hw"><span id="hw-short"></span><span id="hw-full" class="hidden"></span></div></div>
         <div class="row"><div class="row-main"><div class="row-title" data-i18n="about.uuid"></div></div><div class="row-value mono" id="about-uuid"></div></div>
+      </div>
+      <div class="group">
+        <div class="row">
+          <div class="row-main"><div class="row-title" data-i18n="about.events"></div><div class="row-hint" data-i18n="about.events_hint"></div></div>
+          <button class="btn btn-secondary btn-sm" id="btn-events" data-i18n="about.events_show"></button>
+        </div>
       </div>
       <div class="group">
         <div class="row">

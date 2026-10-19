@@ -12,7 +12,7 @@
   };
   var CHANNELS = [6, 36, 40, 44, 48, 149, 153, 157, 161, 165];
   var CH40 = [36, 40, 44, 48, 149, 153, 157, 161];   // 5 GHz channels the hostapd wrapper runs at 40 MHz (valid HT40 pair)
-  var DIAG = ['top', 'dns', 'hostapd', 'hostapd_default', 'lycfg', 'system', 'mtd', 'cmdline', 'mounts', 'meminfo', 'udisk', 'etc_wifi', 'ps', 'env', 'ifconfig', 'private',
+  var DIAG = ['top', 'health', 'health_saved', 'watchdog', 'crash', 't2cd', 't2cd_log', 't2cui', 'thermal', 'btaudio', 'dns', 'iptables', 'hostapd', 'hostapd_default', 'lycfg', 'system', 'mtd', 'cmdline', 'mounts', 'meminfo', 'udisk', 'etc_wifi', 'ps', 'env', 'ifconfig', 'private',
     'hostapd_t2c', 't2c_hostapd', 'hostapd_log', 'flags', 'maps', 'usb', 'vht_fail', 'hostapd_caps', 'wlan_params', 'wlan_ls', 'wlan_all_sta_info', 'wlan_ap_info', 'wlan_trx_info', 'wlan_rx_signal'];
 
   var T = {};

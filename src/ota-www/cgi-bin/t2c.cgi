@@ -18,10 +18,14 @@
 #                         writes), then reboot. 1-12 of A-Z a-z 0-9 space _ . -
 #   GET  ?a=unname        forget the device name (no reboot; used before a factory reset)
 #   GET  ?a=wlanw&f=K&v=V  write a Realtek driver knob (log_level, country_code, change_bss_chbw)
-#   GET  ?a=flag&f=N&v=V   write /mnt/UDISK/t2c_N (hostapd_debug, country, vht_off, vht80, hostapd_extra, adb; empty deletes)
+#   GET  ?a=flag&f=N&v=V   write /mnt/UDISK/t2c_N (hostapd_debug, country, vht_off, vht80, hostapd_extra, adb, watchdog_off, dnsredir_off, dnsdebug, shell; empty deletes)
 #   GET  ?a=hostapd_restart kill hostapd and run the wrapper again (experiments)
 #   GET  ?a=top&v=SECONDS  per-process/thread CPU share over a window, RSS, CPU split, Wi-Fi/PAN throughput
 #   GET  ?a=usbmode&v=adb   USB device mode via setusbconfig (adb | rndis | none); ?a=cat&f=usb shows the state
+#   POST ?a=put&f=t2cd      body = a t2cd build (static ARMv7 ELF, <= 2 MB) -> /tmp/t2cd, started in place of
+#                           the firmware's copy from the next boot / ?a=t2cd_restart; ?a=unput&f=t2cd removes it
+#   GET  ?a=t2cd_restart    stop t2cd and start the current binary (uploaded one first)
+#   GET  ?a=rootfs          raw dump of the rootfs partition (/dev/mtdblock4, squashfs) for a cross-link sysroot
 
 A=''; F=''; V=''
 OLDIFS=$IFS; IFS='&'
@@ -92,8 +96,10 @@ flag)
   # ?a=flag&f=NAME&v=VALUE writes /mnt/UDISK/t2c_NAME (empty value deletes it): hostapd_debug,
   # country (two letters), vht_off. Read by the hostapd wrapper at its next launch.
   json_hdr
-  case "$F" in hostapd_debug|country|vht_off|vht80|hostapd_extra|adb) ;; *) printf '{"code":3,"msg":"unknown flag"}'; exit 0 ;; esac
+  case "$F" in hostapd_debug|country|vht_off|vht80|hostapd_extra|adb|watchdog_off|dnsredir_off|dnsdebug|shell|autoreboot_off|ui_rust) ;; *) printf '{"code":3,"msg":"unknown flag"}'; exit 0 ;; esac
   case "$V" in *[!A-Za-z0-9_=\;\[\]-]*) printf '{"code":2,"msg":"bad value"}'; exit 0 ;; esac
+  # presence flags: v=0 / v=off clears them too (the daemons test for the file, not its content)
+  case "$F" in hostapd_debug|vht_off|vht80|adb|watchdog_off|dnsredir_off|dnsdebug|shell|autoreboot_off|ui_rust) case "$V" in 0|off|false|no) V='' ;; esac ;; esac
   if [ -z "$V" ]; then rm -f "/mnt/UDISK/t2c_$F"; printf '{"code":0,"flag":"%s","value":""}' "$F"
   elif printf '%s\n' "$V" > "/mnt/UDISK/t2c_$F" 2>/dev/null; then sync; printf '{"code":0,"flag":"%s","value":"%s"}' "$F" "$(je "$V")"
   else printf '{"code":1,"msg":"write failed"}'; fi
@@ -147,6 +153,40 @@ usbmode)
   out=$(/mnt/customer/app/t2c_usb.sh "$V" 2>&1); rc=$?
   printf '{"code":%s,"mode":"%s","out":"%s"}' "$rc" "$V" "$(je "$out")"
   ;;
+put)
+  # upload a t2cd build to /tmp (bench use: a new build without a flash; gone at reboot). Only this
+  # one name. Never /mnt/UDISK: the 1.8 MB jffs2 holds the BT pairing and the Wi-Fi config, and on
+  # 2026-10-18 a hang + power cut after repeated 480 KB uploads left it unmountable -> reformatted,
+  # pairing and password lost.
+  [ "$F" = t2cd ] || { json_hdr; printf '{"code":3,"msg":"unknown file"}'; exit 0; }
+  [ "$REQUEST_METHOD" = POST ] || { json_hdr; printf '{"code":4,"msg":"POST a body"}'; exit 0; }
+  len=${CONTENT_LENGTH:-0}; case "$len" in ''|*[!0-9]*) len=0 ;; esac
+  [ "$len" -gt 0 ] && [ "$len" -le 2000000 ] || { json_hdr; printf '{"code":5,"msg":"size 1..2000000 bytes"}'; exit 0; }
+  head -c "$len" > /tmp/t2cd.tmp
+  got=$(wc -c < /tmp/t2cd.tmp | tr -d ' ')
+  if [ "$got" != "$len" ] || ! head -c 4 /tmp/t2cd.tmp | grep -q 'ELF'; then rm -f /tmp/t2cd.tmp; json_hdr; printf '{"code":6,"msg":"short body or not an ELF (%s of %s)"}' "$got" "$len"; exit 0; fi
+  mv /tmp/t2cd.tmp /tmp/t2cd && chmod 755 /tmp/t2cd
+  json_hdr; printf '{"code":0,"bytes":%s}' "$got"
+  ;;
+unput)
+  [ "$F" = t2cd ] || { json_hdr; printf '{"code":3,"msg":"unknown file"}'; exit 0; }
+  rm -f /tmp/t2cd; json_hdr; printf '{"code":0}'
+  ;;
+t2cd_restart)
+  for p in $(pidof t2cd 2>/dev/null); do kill "$p" 2>/dev/null; done
+  sleep 1
+  for p in $(pidof t2cd 2>/dev/null); do kill -9 "$p" 2>/dev/null; done
+  n=0; while iptables -t nat -D PREROUTING -i wlan0 -p udp --dport 53 -j REDIRECT --to-ports 5300 >/dev/null 2>&1 && [ $n -lt 8 ]; do n=$((n + 1)); done
+  bin=''; if [ -x /tmp/t2cd ]; then bin=/tmp/t2cd; elif [ -x /mnt/customer/app/t2cd ]; then bin=/mnt/customer/app/t2cd; fi
+  [ -n "$bin" ] && ( "$bin" </dev/null >/dev/null 2>&1 & )
+  sleep 1
+  json_hdr; printf '{"code":0,"bin":"%s","pid":"%s"}' "$bin" "$(pidof t2cd 2>/dev/null)"
+  ;;
+rootfs)
+  # the read-only rootfs partition (3 MB squashfs): libc.so and friends for cross-linking against the device
+  printf 'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="rootfs.squashfs"\r\nCache-Control: no-store\r\n\r\n'
+  cat /dev/mtdblock4 2>/dev/null
+  ;;
 reboot)
   json_hdr; printf '{"code":0}'
   ( sleep 2; sync; reboot || /sbin/reboot || busybox reboot ) </dev/null >/dev/null 2>&1 &
@@ -179,9 +219,19 @@ cat)
     t2c_hostapd)     f=/tmp/t2c_hostapd.log ;;
     vht_fail)        f=/mnt/UDISK/t2c_vht_fail ;;
     hostapd_log)     f=/tmp/hostapd-t2c.log ;;
+    health)          f=/tmp/t2c_health.log ;;
+    health_saved)    f=/mnt/UDISK/t2c_health.log ;;
+    watchdog)        f=/tmp/t2c_watchdog.log ;;
+    crash)           f=/mnt/UDISK/t2c_crash.log ;;
+    t2cui)           f=/tmp/t2cui.log ;;
+    t2cd_log)        f=/tmp/t2cd.log ;;
+    t2cd)            cmd='for b in /tmp/t2cd /mnt/customer/app/t2cd; do [ -e "$b" ] && ls -la "$b"; done; p=$(pidof t2cd); echo "running: $p"; for q in $p; do grep -E "^(VmRSS|VmSize|Threads)" /proc/$q/status 2>/dev/null; done; iptables -t nat -S PREROUTING 2>&1 | grep -i redirect; echo "udp listeners:"; awk "NR>1 && \$4==\"07\" {print \$2}" /proc/net/udp 2>/dev/null; echo "tcp listeners:"; awk "NR>1 && \$4==\"0A\" {print \$2}" /proc/net/tcp 2>/dev/null; [ -f /mnt/UDISK/t2c_shell ] && echo "shell flag: set"' ;;
+    iptables)        cmd='echo "## nat"; iptables -t nat -S 2>&1; echo "## filter"; iptables -S 2>&1; echo "## string match:"; iptables -m string -h 2>&1 | grep -c -E "algo|from|to" ; echo "## wlan0 addresses"; ifconfig wlan0 2>&1 | grep inet; ifconfig wlan0:0 2>&1 | grep inet' ;;
+    thermal)         cmd='for z in /sys/class/thermal/thermal_zone*; do [ -d "$z" ] && printf "%s %s %s\n" "$z" "$(cat $z/type 2>/dev/null)" "$(cat $z/temp 2>/dev/null)"; done; echo "cpufreq: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null) governor $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)"' ;;
+    btaudio)         cmd='logcat -v threadtime -d 2>/dev/null | grep -iE "sco|wbs|msbc|pcm fs|pcm clk|HFP version|Mic vol|NREC|Voice Recognition|hfp (activate|established|link lost|normal disconnect|disconnect by)|IND_SCO|Audio is|phonecall|speech|mic (mute|unmute|in start|out)|apm_mic" | tail -n 250' ;;
     usb)             cmd='/mnt/customer/app/t2c_usb.sh status; ls -la /bin/adbd /bin/setusbconfig 2>&1; echo "## modules:"; ls -R /lib/modules 2>&1 | head -n 60; echo "## gadget dirs:"; ls /sys/kernel/config/usb_gadget/ /sys/kernel/config/usb_gadget/*/ /sys/kernel/config/usb_gadget/*/functions 2>&1 | head -n 20; echo "## usb-related in /proc/modules + builtin:"; grep -iE "usb|gadget|udc|composite|f_" /proc/modules /lib/modules/*/modules.builtin 2>/dev/null | head -n 20; echo "## setusbconfig:"; cat /bin/setusbconfig' ;;
     maps)            cmd='for p in $(ps 2>/dev/null | awk "/tesla -s/ && !/awk/ {print \$1}"); do echo "## pid $p"; grep -E "^(VmRSS|VmData|VmSize|Threads)" /proc/$p/status; while read -r range perm rest; do case "$perm" in *w*) ;; *) continue ;; esac; a=${range%-*}; b=${range#*-}; sz=$(( (0x$b - 0x$a) / 1024 )); n=${rest##* }; case "$n" in [0-9]*|"") n=anon ;; esac; echo "$sz $n"; done < /proc/$p/maps | awk "{t[\$2]+=\$1; c[\$2]++} END {for (n in t) printf \"%8d kB %4d maps  %s\\n\", t[n], c[n], n}" | sort -rn | head -n 10; done' ;;
-    flags)           cmd='for f in /mnt/UDISK/t2c_hostapd_debug /mnt/UDISK/t2c_country /mnt/UDISK/t2c_vht_off /mnt/UDISK/t2c_vht80 /mnt/UDISK/t2c_hostapd_extra /mnt/UDISK/t2c_adb /mnt/UDISK/t2c_vht_fail; do [ -e "$f" ] && printf "%s: %s\\n" "$f" "$(cat "$f" 2>/dev/null)"; done; true' ;;
+    flags)           cmd='for f in /mnt/UDISK/t2c_hostapd_debug /mnt/UDISK/t2c_country /mnt/UDISK/t2c_vht_off /mnt/UDISK/t2c_vht80 /mnt/UDISK/t2c_hostapd_extra /mnt/UDISK/t2c_adb /mnt/UDISK/t2c_watchdog_off /mnt/UDISK/t2c_dnsredir_off /mnt/UDISK/t2c_dnsdebug /mnt/UDISK/t2c_shell /mnt/UDISK/t2c_autoreboot_off /mnt/UDISK/t2c_ui_rust /mnt/UDISK/t2c_crash_count /mnt/UDISK/t2c_vht_fail; do [ -e "$f" ] && printf "%s: %s\\n" "$f" "$(cat "$f" 2>/dev/null)"; done; true' ;;
     wlan_params)     cmd='grep -r . /sys/module/8821cs/parameters/' ;;
     hostapd_caps)    cmd='/usr/sbin/hostapd -v 2>&1 | head -n 3; /usr/sbin/hostapd -h 2>&1 | grep -E "^ +-[a-zA-Z]"; for k in ieee80211ac vht_oper_chwidth vht_capab ieee80211n ht_capab; do printf "%s: %s\n" "$k" "$(grep -c "$k" /usr/sbin/hostapd 2>/dev/null)"; done; ls -la /usr/sbin/hostapd' ;;
     wlan_ls)         cmd='ls -la /proc/net/rtl8821cs/wlan0' ;;

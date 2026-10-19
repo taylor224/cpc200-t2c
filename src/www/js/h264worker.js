@@ -13,16 +13,19 @@
  *
  * Messages in : {id:'init', canvas, simd}   {id:'decode', data:ArrayBuffer, off, len, lost, draw}   {id:'clear'}
  * Messages out: {id:'ready', gl2} {id:'done'} {id:'size',w,h} {id:'key'} {id:'needkey'} {id:'refresh'}
- *               {id:'stats', dec, ms, wait} {id:'error', message}
+ *               {id:'stats', dec, ms, wait} {id:'error', message, transient} {id:'loading', attempt}
  *   needkey : decoding cannot start (or restart) until an IDR arrives
  *   refresh : decoding continues but a reference frame was lost; a new IDR would clean the picture
+ *   error   : transient = the browser is fine, the network or GPU was not (module fetch failed while
+ *             the Wi-Fi was away, GL context lost for good); otherwise the browser cannot decode
+ *   loading : the decoder module could not be fetched (no network); retrying
  */
 'use strict';
 
 var Module = null;
 var gl = null, isGL2 = false, canvas = null;
 var prog = null, tex = [], uMatrix = null, uOffset = null;
-var glLost = false, lostTimer = 0;
+var glLost = false, lostTimer = 0, paused = false;
 var inPtr = 0, inCap = 0;
 var waitKey = true;         // nothing decodable until an SPS/IDR shows up
 var lostRef = false;        // a frame was skipped: references are broken until the next IDR
@@ -47,7 +50,8 @@ function initGL(c) {
   c.addEventListener('webglcontextlost', function (e) {
     e.preventDefault();
     glLost = true;
-    if (!lostTimer) lostTimer = setTimeout(function () { self.postMessage({ id: 'error', message: 'webgl context lost' }); }, 10000);
+    // A hidden page loses its GPU context routinely; the clock only runs while the page is shown.
+    if (!paused) armLostTimer();
   });
   c.addEventListener('webglcontextrestored', function () {
     if (lostTimer) { clearTimeout(lostTimer); lostTimer = 0; }
@@ -60,6 +64,14 @@ function initGL(c) {
     }
   });
   setupGL();
+}
+
+function armLostTimer() {
+  if (lostTimer) return;
+  lostTimer = setTimeout(function () {
+    lostTimer = 0;
+    if (glLost) self.postMessage({ id: 'error', message: 'webgl context lost', transient: true });
+  }, 10000);
 }
 
 /** (Re)create program, quad and textures; valid for the current GL context only. */
@@ -219,18 +231,38 @@ self.onmessage = function (ev) {
       initGL(d.canvas);
       importScripts('h264dec.js');
       // Fetch the module ourselves: the adapter's web server (libwebsockets 3.2) has no
-      // MIME entry for .wasm and refuses unknown extensions, hence the .txt name.
-      fetch('h264dec.wasm.txt', { cache: 'force-cache' }).then(function (r) {
-        if (!r.ok) throw new Error('wasm http ' + r.status);
-        return r.arrayBuffer();
-      }).then(function (bin) {
-        return createH264Dec({ wasmBinary: bin, locateFile: function (f) { return f; } });
-      }).then(function (m) {
-        Module = m;
-        var r = Module._dec_init();
-        if (r < 0) { self.postMessage({ id: 'error', message: 'dec_init ' + r }); return; }
-        self.postMessage({ id: 'ready', gl2: isGL2 });
-      }).catch(function (e) { self.postMessage({ id: 'error', message: 'wasm load: ' + (e && e.message) }); });
+      // MIME entry for .wasm and refuses unknown extensions, hence the .txt name. A fetch that
+      // fails because the Wi-Fi is away is not a missing capability: retry (2, 4, 8 … 30 s) and
+      // tell the app, which keeps H.264 selected. Only a module that does not instantiate
+      // means the browser really cannot decode.
+      var attempt = 0;
+      function load() {
+        attempt++;
+        fetch('h264dec.wasm.txt', { cache: 'force-cache' }).then(function (r) {
+          // the module is part of this firmware: a non-200 answer is the server having a bad moment
+          if (!r.ok) throw { transient: true, message: 'wasm http ' + r.status };
+          return r.arrayBuffer();
+        }, function (e) {
+          throw { transient: true, message: 'wasm fetch: ' + (e && e.message) };
+        }).then(function (bin) {
+          return createH264Dec({ wasmBinary: bin, locateFile: function (f) { return f; } }).then(null, function (e) {
+            throw { fatal: true, message: 'wasm instantiate: ' + (e && e.message) };
+          });
+        }).then(function (m) {
+          Module = m;
+          var r = Module._dec_init();
+          if (r < 0) { self.postMessage({ id: 'error', message: 'dec_init ' + r }); return; }
+          self.postMessage({ id: 'ready', gl2: isGL2 });
+        }).catch(function (e) {
+          if (e && e.transient && attempt < 12) {
+            self.postMessage({ id: 'loading', attempt: attempt, message: e.message });
+            setTimeout(load, Math.min(30000, 1000 * Math.pow(2, Math.min(attempt, 5))));
+            return;
+          }
+          self.postMessage({ id: 'error', message: 'wasm load: ' + ((e && e.message) || e), transient: !!(e && e.transient) });
+        });
+      }
+      load();
     } catch (e) {
       self.postMessage({ id: 'error', message: String(e && e.message) });
     }
@@ -241,6 +273,14 @@ self.onmessage = function (ev) {
       catch (e) { self.postMessage({ id: 'error', message: String(e && e.message) }); }
     }
     self.postMessage({ id: 'done' });
+  } else if (d.id === 'pause') {
+    paused = true;
+    if (lostTimer) { clearTimeout(lostTimer); lostTimer = 0; }
+  } else if (d.id === 'waitkey') {
+    // resume after a pause: decode nothing until an IDR arrives, keep the last picture
+    paused = false;
+    waitKey = true; lostRef = false; refreshAsked = false;
+    if (glLost) armLostTimer();      // still lost after coming back: give the GPU its 10 s now
   } else if (d.id === 'clear') {
     waitKey = true; lostRef = false; refreshAsked = false;
     lastW = lastH = 0;            // report the size of the next stream even if it is the same

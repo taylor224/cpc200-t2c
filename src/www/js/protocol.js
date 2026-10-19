@@ -4,7 +4,7 @@
  *   client -> server : Int16 header [length, type] followed by payload
  *     type 2  : hello   [w, h] + language\0 + navigator-string\0
  *     type 1  : touch   [m, x, y]    m: 0 down, 2 move, 1 up ; x,y in 0..1000
- *     type 3  : command [cmd]        see CMD below
+ *     type 3  : command [cmd]        see CMD below (10 = reboot the adapter, Rust UI only)
  *     type 7  : setting [key, value] see KEY below
  *     type 8  : night   [n]          0 day / 1 night (forwarded to the iPhone)
  *     type 10 : car name (12 bytes) + icon id
@@ -21,7 +21,7 @@
 (function (global) {
   'use strict';
 
-  var CMD = { VIDEO: 0, AUTO_ON: 1, AUTO_OFF: 2, BTLIST: 5, DISCONNECT: 6, FACTORY_RESET: 7, KEYFRAME: 8, QR: 9 };
+  var CMD = { VIDEO: 0, AUTO_ON: 1, AUTO_OFF: 2, BTLIST: 5, DISCONNECT: 6, FACTORY_RESET: 7, KEYFRAME: 8, QR: 9, REBOOT: 10 };  // 10: Rust UI only (stock ignores it)
   var KEY = { NIGHT: 1, PIXEL: 2, DRIVER: 3, CHANNEL: 6, LANG: 7, BTNET: 8, FPS: 9, ONLINE: 10, MODE: 11 };
 
   // Seconds of missing pongs before the link is probed (status JSON carries the pong once a second).
@@ -71,6 +71,8 @@
   LinkClient.prototype.connect = function (hello) {
     var self = this;
     this.hello = hello || this.hello;
+    this.suspended = false;
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = 0; }
     if (this.ws) { try { this.ws.close(); } catch (e) { /* ignore */ } }
     var ws = this.ws = new WebSocket(wsUrl(), 'tsl');
     ws.binaryType = 'arraybuffer';
@@ -112,13 +114,15 @@
     this.cleanup();
   };
 
+  /* A hidden page reconnects too: since 26101701 the adapter neither restarts the CarPlay session
+   * on a hello nor stops it when a socket closes, so an idle reconnect costs nothing and the page
+   * is ready the moment Tesla shows it again. */
   LinkClient.prototype.scheduleReconnect = function () {
     var self = this;
     if (this.suspended || this.reconnectTimer) return;
     this.reconnectTimer = setTimeout(function () {
       self.reconnectTimer = 0;
-      if (!document.hidden && !self.suspended) self.connect();
-      else self.scheduleReconnect();
+      if (!self.suspended) self.connect();
     }, 1000);
   };
 

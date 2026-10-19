@@ -215,7 +215,7 @@ def h264_loop():
                     broadcast(msg(103, chunks[-1]))
             if burst > 1:
                 log('burst of %d access units' % burst)
-            time.sleep(1 / 30)
+            time.sleep(1 / max(1, ARGS.fps or 30))   # --fps above ~200 overloads the page's decoder on purpose
         else:
             time.sleep(0.2)
 
@@ -236,6 +236,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if ARGS.wasm_fail and self.path.split('?')[0].endswith('h264dec.wasm.txt'):
+            STATE['wasm_fails'] = STATE.get('wasm_fails', 0) + 1
+            if STATE['wasm_fails'] <= ARGS.wasm_fail:
+                # a 503 rather than a dropped socket: Chrome silently retries a request whose
+                # connection died before any byte arrived, which would hide the worker's own retry
+                log('wasm request %d answered 503 (--wasm-fail)' % STATE['wasm_fails'])
+                self.send_bytes(b'busy', 'text/plain', 503)
+                return
         path = urllib.parse.urlparse(self.path).path
         if self.headers.get('Upgrade', '').lower() == 'websocket':
             return self.handle_ws()
@@ -469,6 +477,7 @@ def main():
     p.add_argument('--h264', default='')
     p.add_argument('--port', type=int, default=8765)
     p.add_argument('--fps', type=float, default=30)
+    p.add_argument('--wasm-fail', type=int, default=0, help='answer the first N requests for h264dec.wasm.txt with 503 (Wi-Fi away while the decoder loads)')
     p.add_argument('--link-after', type=float, default=-1, help='seconds after hello to simulate a phone link (-1 never)')
     p.add_argument('--mode', choices=['picture', 'video'], default='picture')
     p.add_argument('--lan', type=int, default=3)

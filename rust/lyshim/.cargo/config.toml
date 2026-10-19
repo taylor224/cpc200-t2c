@@ -1,0 +1,24 @@
+# Dynamic musl executable for the adapter: links against the device's own libc.so and the vendor
+# libs from ../sysroot (rootfs dump + app/ui), with rustc's bundled crt objects and rust-lld.
+[target.armv7-unknown-linux-musleabihf]
+linker = "rust-lld"
+rustflags = [
+  # the device sysroot must come before rustc's self-contained musl: `-L` (a rustc flag) is put
+  # first on the linker line, `-C link-arg=-L` last -- which let libc.a win and linked a second
+  # malloc into the binary (free() of a libc.so chunk -> musl a_crash -> SIGILL, 2026-10-19)
+  # (the device libc.so has no section headers, lld cannot read it: stub/libc.so is an import-only
+  #  build of rustc's musl libc.a with SONAME libc.so, see tools/mksysroot.sh)
+  "-L", "native=/Users/taylor/Documents/develop/carlinkit-t2c-firmware/main-2/rust/sysroot/stub",
+  "-L", "native=/Users/taylor/Documents/develop/carlinkit-t2c-firmware/main-2/rust/sysroot/lib",
+  "-L", "native=/Users/taylor/Documents/develop/carlinkit-t2c-firmware/main-2/rust/sysroot/vendor",
+  "-C", "linker-flavor=ld.lld",
+  "-C", "link-self-contained=yes",
+  "-C", "target-feature=-crt-static",
+  "-C", "target-cpu=cortex-a7",
+  "-C", "relocation-model=pic",
+  "-C", "link-arg=--dynamic-linker=/lib/ld-musl-armhf.so.1",
+  "-C", "link-arg=-L/Users/taylor/Documents/develop/carlinkit-t2c-firmware/main-2/rust/sysroot/lib",
+  "-C", "link-arg=-L/Users/taylor/Documents/develop/carlinkit-t2c-firmware/main-2/rust/sysroot/vendor",
+  "-C", "link-arg=-lunwind",
+  "-C", "link-arg=--as-needed",
+]

@@ -132,11 +132,16 @@ Not on the web path at all, and not on the CarPlay (Wi‑Fi) path either: the Te
 `libcarplay.so` disables the session's audio output (`CPClientDisableAudioOutput … may be for
 Tesla`, `not copy the audio format, for Tesla` in the device log; lylinkui's own audio
 output stays `not init`), because the car accepts audio only over Bluetooth. Music and calls
-are bridged by the Goodix module (`gocsdk`/`libGbtsTask`, CSR‑Synergy based, firmware
-`GBTSD4.95G4.72`): A2DP sink + HFP hands‑free towards the iPhone, A2DP source + HFP AG towards
-the car, on one Classic radio that also carries the PAN (the car's internet). The A2DP stack
-is SBC only (bitpool negotiated, `filter_sbc: … remoteMaxBitpool`; no AAC/aptX strings), so
-the best case is SBC at full bitpool, twice. Nothing in `app/` changes codec or bitpool;
+go over the **Tesla's own Bluetooth pairing with the iPhone**, not through the adapter: the
+adapter's stack (`gocsdk`/`libGbtsTask`, CSR‑Synergy based, firmware `GBTSD4.95G4.72`) has the
+HF role towards phones (hundreds of `CsrBtHf*` handlers), A2DP and the PAN, but no hands‑free
+gateway role at all (not one `CsrBtHfg*` profile handler, only two misnamed helpers), so the car
+cannot connect to it as to a phone. The HFP link the adapter opens to the iPhone is part of the
+wireless‑CarPlay handshake and is dropped afterwards (`CARPLAY_ON_DISCONNECT_HFP`), which is what
+leaves the iPhone's call/Siri audio with the Tesla's link. (Earlier notes here assumed an
+A2DP‑source/HFP‑AG bridge towards the car — corrected 2026‑10‑17.) The A2DP code is SBC only
+(bitpool negotiated, `filter_sbc: … remoteMaxBitpool`; no AAC/aptX strings). Nothing in `app/`
+changes codec or bitpool;
 `/mnt/UDISK/bt_conf.ini` (131 bytes, `t2c.cgi?a=cat&f=bt_conf`) and `/etc/GocPcmConf.ini` are
 the only configuration files it reads. `LYLINK_AUDIO_START/STOP` and `LYLINK_RECORD_*`
 handlers exist in lylinkui for other products; `/mic_test.pcm` records from that path.
@@ -447,13 +452,16 @@ Binary, exactly 556 bytes, read and written whole (`fread/fwrite(…, 1, 556)`, 
 shorter than 548 bytes is rejected). Lives at `this+0x458` inside lylinkui's main object:
 
 ```
-+0   u8  night            +1  u8 pixel (3 = auto)      +2  u8 driver
-+3   u8  0x4d  +4 u8 0x3c (unknown)                    +5  u8 channel (161)
-+6   u8  temp channel (0xff = none)                    +7  u8 0
++0   u8  night (0..2 day variants, 3..5 = night on)   +1  u8 pixel (3 = auto)      +2  u8 driver
++3   u8  0x4d/0x64  +4 u8 0x3c/0x64 (unknown)          +5  u8 channel (0xff = default 149)
++6   u8  language (0 zh-CN, 1 zh-TW, 2 en, 0xff = auto) +7  u8 bt modem (btnet)
 +8   char psk[12]        Wi‑Fi password, NUL‑terminated → at most 11 characters
 +20  char name[12]       car name shown on iOS ("Auto")
++32  char icon[12]       car-app icon id (www/icon/<id>.png)
 …    zeros
-+548 u8 btnet, +549 0, +550 u8 mode (1 = H.264 video), tail zeros
++548 u8 fps flag (page "smooth"), +550 u8 mode (1 = H.264 video), +552 u8 auto-connect, tail zeros
+(re-read from the KEY handlers 2026-10-19: lycfg offset = lylinkui g offset − 0x458; the online-check
+flag is RAM-only in stock)
 ```
 The WebSocket type‑9 message does `memcpy(this+0x460, payload, len)` and only writes the
 terminator when `len <= 11`; a 12‑byte password therefore runs into `name`. After storing
@@ -543,6 +551,108 @@ answered at once, everything else gets REFUSED while the phone is online and the
 moves on to 8.8.8.8 (one local round trip). While the adapter's own online check fails the
 stock `tesla` catch‑all answers first instead of last — the same fake connectivity the stock
 design relies on, just without the public‑resolver timeouts before it.
+
+**Still failing in the car (2026-10-17).** The dnsd side checks out: the table answer is header +
+question + answer RR (the query's OPT record is not copied, ARCOUNT is 0 since 26101509), TTL 121,
+uncompressed name. What the Tesla does with it is the open question — the stock design never needed
+the car to use the adapter's DNS at all: `tespush.com` resolves publicly to 101.200.208.6, the same
+address lyLoadModule.sh puts on `wlan0:0` (`ifconfig wlan0:0 101.200.208.6 netmask 255.255.255.255`),
+so the car reaches lylinkui whichever resolver answered. A car that ignores the DHCP resolver list
+(fixed public DNS, or Chromium's own resolver) gets NXDOMAIN for `carplay.internal` from 8.8.8.8 and
+never asks the adapter. Two consequences, 26101703:
+
+- The address that works regardless of DNS is **`http://101.200.208.6/`** — plain HTTP, lylinkui
+  serves the UI and the WebSocket (`ws://`) for any host that is not `tespush.com`. This is also the
+  answer to "can the WebSocket run without TLS": yes, by opening the page over HTTP; the page picks
+  `ws://` for `http:` pages (`protocol.js`). On the adapter the TLS thread was ~5 % of the core at
+  2 Mbit/s (`a=top`), so the gain is modest; the car side's TLS cost is negligible on its x86 CPU.
+- The kernel (xz piggy found at 0x3be9 of the uImage, 4.4 MB vmlinux) has the `REDIRECT` and
+  `MASQUERADE` targets but **no `string` match**, so "redirect only `.internal` queries to dnsd" is
+  not possible, and redirecting *all* of the car's DNS to lylinkui's dnsd would kill the car's
+  internet (dnsd cannot forward). Hence **`t2cd`** (`rust/t2cd`, 26101704): a static Rust DNS
+  forwarder on UDP 5300 — table names answered locally (`carplay.internal`/`tespush.*` →
+  101.200.208.6, `setting.internal` → 192.168.3.1), everything else forwarded to the resolvers
+  udhcpc wrote to `/etc/resolv.conf` (8.8.8.8/1.1.1.1 fallback, 2.5 s per resolver, then SERVFAIL),
+  and while the PAN default route is down the stock offline behaviour (`*tesla*` → 101.200.208.6
+  TTL 0 for the car's connectivity check, REFUSED otherwise). It keeps the nat rule
+  `PREROUTING -i wlan0 -p udp --dport 53 -j REDIRECT --to-ports 5300` (re-added after lylinkapp's
+  nat flush) so the car's DNS lands there whatever resolver the car chose; lylinkui's dnsd still
+  answers direct queries to 192.168.3.1:53. The watchdog restarts t2cd and removes the rule while it
+  is not running. Flags: `t2c_dnsredir_off` (rule off, forwarder stays), `t2c_dnsdebug` (log every
+  query to `/tmp/t2cd.log`), `t2c_shell` (debug shell, below). Diagnostics `t2cd`, `t2cd_log`,
+  `iptables`. Device-tested 2026-10-18 on 26101703 with an uploaded build: the port had to move
+  from 5353 (**mdnsd's**, Bonjour) to 5300; after that the rule, table answers, upstream via the
+  phone's PAN, the flag toggle and the watchdog relaunch all behaved; 2 000 queries in 7 s at
+  500 KB RSS. In the car still to be seen.
+- **Debug shell.** The rootfs busybox (372 KB, Jul 2022) has these applets only: ash awk basename
+  brctl cat chgrp chmod chown chroot clear cmp cp crond crontab cut date dd df dirname dmesg du echo
+  env expr false fgrep find flock free fsync grep gzip head httpd id ifconfig init insmod kill
+  killall less linuxrc ln lock login ls lsmod lsof lsusb md5sum mkdir mkfifo mknod mktemp mount mv
+  netstat nice nslookup pgrep pidof ping pivot_root printf ps pwd readlink reboot reset rm rmdir
+  rmmod route sed seq sh sha256sum sleep sort strings sync sysctl tail tee time top touch tr true
+  udhcpc udhcpd umount uname uniq unzip usleep vi watchdog wc wget which yes — no telnetd, nc,
+  stty, getty, ssh. So `t2cd` serves the shell: with `/mnt/UDISK/t2c_shell` present
+  (`t2c.cgi?a=flag&f=shell&v=1`, `v=` removes it) it listens on tcp/2323 for hotspot clients
+  only and gives each connection a root `/bin/sh -i` on a pty (raw bytes, no telnet negotiation,
+  window size as a `\x1dWS rows cols` header, 3 sessions). Client: `tools/shell.py` (interactive,
+  Ctrl-] quits) or `tools/shell.py -c 'ps; cat /proc/loadavg'`. Remove the flag after use.
+  Hang-up (client gone) sends SIGHUP to the shell's group and, via `TIOCSIG`, to the pty's
+  foreground group (vi/top run in their own group), SIGKILL after 2 s; a job left with `&` keeps
+  the pty but not the session. Tested 2026-10-18: prompt, vi edit/`:wq`, resize, Ctrl-] with vi
+  open — no leftover processes.
+
+Checks for the car: type `http://carplay.internal/` (with the scheme; a bare `.internal` name is a
+search in Chromium), then `http://101.200.208.6/`; from a laptop on the hotspot
+`dig @192.168.3.1 carplay.internal` (expect 101.200.208.6, TTL 121) and `dig @192.168.3.1 example.com`
+(expect REFUSED while the phone is online).
+
+## Do not source /etc/profile on the adapter
+
+The rootfs `/etc/profile` ends with `ly_boot.sh &`: every login shell *boots the vendor stack*.
+Sourcing it from a bench script (to pick up `WIFI_NAME`, `BT_NAME`, `LY_VERSION`...) started a second
+lylinkui/lylinkapp/gocsdk/hostapd on 2026-10-19 — the access point flapped every half minute with
+no usable SSID until a power cycle. `app/t2c_dev.sh` reproduces the exports instead
+(`fw_printenv custom_name`, the sysfs product number, `system.json` version) and is the only
+sanctioned way to stop/start the UI stack by hand; launching `tesla -s` without `WIFI_NAME` writes an
+empty `ssid=` into `/tmp/hostapd.conf` (same symptom).
+
+## Radio hang: detection and auto-reboot (26101705)
+
+On 2026-10-18 after ~2 h at the desk the adapter's Wi-Fi AP and Bluetooth disappeared together
+while every LED stayed on (green/blue) -- the RTL8821CS is one combo chip (Wi-Fi over SDIO on
+irq 305 `sunxi-mmc1`, BT over UART3 on irq 295), lylinkui never noticed, and nothing short of a
+power cut brought it back. The cut then left the jffs2 UDISK unmountable, the boot scripts
+reformatted it, and the Bluetooth pairing, the Wi-Fi password and the channel were gone. Whether
+the root cause was the chip or the kernel is unproven (the pre-hang health log went with the
+partition); this is the same shape as "Sharp + Smooth drops after 10-30 min and the phone cannot
+rejoin" (Bluetooth gone too).
+
+What 26101705 does about it (`src/app/t2c_watchdog.sh`):
+
+- **Liveness probe every 30 s.** The driver's `/proc/net/rtl8821cs/wlan0/read_reg` reads a MAC
+  register over the SDIO bus; the TSF timer (0x560, microseconds, runs while the AP is up:
+  ~1,000,000 per second measured) must advance between probes while hostapd runs. A value that
+  does not move, the driver's bus-error values (`eaeaeaea`/`ffffffff`), or a read that does not
+  return in 8 s counts as bad; three in a row (90 s) = dead. (Idle interrupt rates with a phone
+  connected: SDIO ~230/s, BT UART ~9/s -- too variable to use as the trigger, so they are only
+  logged, `irq=mmc1/uart3` and `tsf=` in the health line.)
+- **Evidence first:** `/mnt/UDISK/t2c_crash.log` (phone page diagnostic `crash`, kept under
+  16 KB): the probe values, interrupt counters, last health lines, `dmesg` and logcat tails.
+- **Then a clean `reboot`** (sync first; `reboot -f` and sysrq `b` as fallbacks if init hangs),
+  at most 3 in a row (`/mnt/UDISK/t2c_crash_count`, reset after 30 min of health) so a chip that
+  is dead at boot cannot loop forever. `t2c_autoreboot_off` keeps the evidence and skips the
+  reboot. `/tmp/t2c_test_dead` fakes three bad probes (bench test of the whole path).
+- `kernel.panic=20` so a kernel panic reboots instead of sitting on a frozen console.
+- No hardware watchdog: the stock update flow `killall -9`s every app process before writing the
+  customer partition, and an armed `/dev/watchdog` without a magic close would reboot the adapter
+  mid-flash. Two `/dev/watchdog` devices exist (sunxi + AXP); nothing opens them.
+- Bench uploads never touch UDISK any more (`put` -> `/tmp/t2cd`); the partition is 1.8 MB and
+  holds the pairing.
+- **A flash deletes our UDISK files.** After the 26101705 OTA the pairing (`bt_conf.ini`,
+  `sc_db.db`) and `lycfg.txt` were still there, but `t2c_health.log`, `t2c_crash.log`,
+  `t2c_crash_count` and the `t2c_shell` flag were gone (the stock update flow cleans the partition
+  and keeps its own files). So flags such as `t2c_shell`/`t2c_autoreboot_off`/`t2c_vht80` have to
+  be set again after every flash, and crash evidence must be read before flashing.
 
 ## Device name (Bluetooth name, CarPlay car name)
 
@@ -649,3 +759,182 @@ could go wrong over a long drive were event paths, fixed after 26101504:
 - The phone page shows memory *used* (`MemTotal − MemAvailable`) and a CPU busy share
   (`t2c.cgi?a=info` samples `/proc/stat` twice, 0.3 s apart, `cpu_pct`; `cgi` is 4). The
   adapter runs at load 2–2.8 on its single core while a session is up.
+
+## The session survives the car browser (2026-10-17, 26101701)
+
+What the stock pair did when the Tesla browser was closed and reopened (device log 2026-10-16, the
+`unbind`/`closed` lines of `callback_tsl` and lylinkapp's `OnTakeVideo`): the page's WebSocket
+closes → lylinkui (CLOSED of the current client, 0x19618) clears `g+0x4c` and calls
+`lylinkapi_cmd(2)` → lylinkapp `OnTakeVideo` → libcarplay `TakeScreen`: CarPlay screen mode →
+accessory, `LYLINK_VIDEO_STOP`, `_requestProcessTearDown`. The page then reloaded itself on
+`visibilitychange` and sent cmd VIDEO at link 1, which goes through `lylinkapi_cmd(3)`
+(`OnUntakeVideo` → `UntakeScreen`, a new screen setup) — the second "off/on" the user saw, and the
+navigation app lost its route each time. Three lylinkui patches (`tools/patch_lylinkui.py` 12–14)
+and a page change fix this:
+
+- **CLOSED** (0x1965c): `lylinkapi_cmd(2)` only while no phone is attached (`g+0x30c == 0`, the
+  adapter's own menu stream would otherwise keep encoding for nobody). With a phone the session runs
+  on; the IPC thread frees the units (patch 10) until a page is back.
+- **cmd VIDEO** (0x18214–0x1825c): link 1 → 3 as before (video requested), but link 2 stays 2 and the
+  "untake" is skipped — a running stream only needs the key-frame request that follows.
+- **ly_misc_thread** (0x16660): the idle sleep is gone. Stock: `r7` = 600 s after boot, 120 s after
+  the last phone/page/video (`g+0x30c`, `g+0`, `g+0x318`, `g+0x314` all zero), then `killall hostapd`
+  ("sleeping") and `sleep 1` in a loop until one of them is set again, then `lylinkapi_cmd(12)` ("wake
+  up") relaunches hostapd. So the AP was deliberately off whenever the user had been away for two
+  minutes, and only came back through the phone's Bluetooth connect → hostapd relaunch (wrapper) chain;
+  a failure anywhere in that chain left the adapter without Wi-Fi until a power cycle — the "the
+  adapter's Wi-Fi is off and nothing connects" report. The `bne` back to the countdown is now an
+  unconditional branch: the counter wraps, the AP stays up.
+- **Page**: on `visibilitychange` hidden the socket stays open while a phone is attached and only
+  decoding pauses (`VideoPresenter.pause`, units dropped on arrival); without a phone the socket is
+  closed so the adapter can stop its menu stream. On visible: key-frame request (worker `waitkey`:
+  skip P-frames until the IDR, keep the last picture), or a plain reconnect if the socket is gone, and
+  a 5 s check that frames actually arrive (else `drop()` + reconnect). No reload. Hidden pages also
+  reconnect now (a hello costs nothing with pixel ≠ 3).
+- **Takeover**: `superseded` no longer asks. The page retries by itself after 3, 5, 10, 20, 30, 60 s
+  (backoff reset after a minute of stable connection), only while visible; the home screen shows the
+  countdown and "Use this screen" retries at once. Two visible pages now alternate without a single
+  CarPlay restart (verified against `devserver.py` with two headless Chromes); a hidden one never
+  steals. The false-positive case (lylinkui's status thread stalls while HTTP answers) heals itself.
+
+Bench (devserver 768×608 @ 30 fps, headless Chrome, `document.hidden` overridden): hidden with a
+phone → socket kept, 0 fps/0 rx while hidden, back at 23 fps within one key frame; hidden without a
+phone → close 1005, reconnect on visible. Device test pending (the adapter was not reachable).
+
+## Decoder too slow: step down instead of MJPEG-for-a-week (26101701)
+
+Sharp (1536×960 here) × Smooth (the adapter asks the iPhone for a higher frame rate; stock Standard
+is already 40 fps in `ScreenPlayerSetParam`) is more pixels per second than an Intel-era car decodes in
+WebAssembly. The old 'slow' verdict (40 % undecoded for 5 s, or a 15-unit backlog for 5 s) switched to
+MJPEG for a week and restarted the session — on a drive this fired once the map started moving for
+good, 10–30 min in, and MJPEG at that size means the adapter's own decode+JPEG path at full load.
+Now `h264Failed('slow')` first sets the frame rate back to Standard (`KEY.FPS` 0, the adapter restarts
+the session), on the next verdict the picture size Sharp → Balanced, and only then MJPEG, for a day.
+Each step is a toast and an event. Bench: devserver at 400 units/s → 'slow' → `setkey fps 0`, then
+`sharp → balanced`.
+
+## Watchdog and health log (`src/app/t2c_watchdog.sh`, 26101701)
+
+Started by `blink.sh` right after gocsdk (build hook). Every 15 s: gocsdk missing twice → `bt_rst`
++ relaunch as blink.sh did (without gocsdk the iPhone can never reconnect — wireless CarPlay starts
+over Bluetooth); hostapd daemon missing three times while lylinkui runs → the wrapper is run again;
+both at most 6/h, `/mnt/UDISK/t2c_watchdog_off` disables them. Health line once a minute to
+`/tmp/t2c_health.log` (400 lines) and every 10 min to `/mnt/UDISK/t2c_health.log` (≤ 48 KB): uptime,
+MemAvailable, load, `thermal_zone0`, pids of tesla/lylinkapp/gocsdk, hostapd, stations, wlan0/bt-pan
+bytes, OOM count. Phone page diagnostics: `health`, `health_saved`, `watchdog`, `thermal`, `btaudio`
+(logcat lines about SCO/WBS/HFP for the Siri microphone question). The wrapper now verifies the daemon
+a second after `-B`, excludes shells and its own monitor from `ps` matches, kills a stale monitor pid
+only when `/proc/<pid>/cmdline` is really the monitor, and retries the stock file three times instead
+of exiting without an AP.
+
+## Siri microphone (asked 2026-10-17; answered after reading libGbtsTask, 26101702)
+
+The Tesla's microphone reaches the iPhone over the **Tesla's own Bluetooth HFP link to the iPhone**;
+the adapter is not in that path. `libGbtsTask.so` (CSR Synergy) implements the hands‑free *unit*
+role (towards phones: `CsrBtHf*`, `hfp_*`), A2DP and PAN, and has **no hands‑free gateway role**
+(`CsrBtHfg*` handlers are absent; `CSR_BT_HFG_IFACEQUEUE` is just a queue id; the only "Hfg" code
+is the misnamed `CsrBtHfgNumberOfXtraCodecsSupported`, used by the HF side's `AT+BAC` builder).
+So the car switching into its phone‑call audio mode when Siri opens is the Tesla↔iPhone SCO link
+(HFP is Bluetooth's only microphone path; A2DP is one‑way), and the **8 kHz narrowband (CVSD) is
+negotiated between the Tesla and the iPhone** — a Tesla firmware matter, out of reach of this
+firmware. Verification from the adapter: during Siri the `btaudio` diagnostic shows no SCO events
+on the adapter at all.
+
+For the record, the adapter's own HF role has dormant wideband code: the flag at `.bss` 0x3bba5c
+(`hfp_get_sco_support_msbc`/`hfp_msbc_is_init`, setter never called anywhere) gates the 16 kHz
+host path in `inComingBcspSound` (`gbts_apm_* (16000, …)`), the eSCO handling in
+`dm_sync_acl_ready`, and `initInstanceData`'s HF features (`0x17f`, `| 0x80` codec negotiation
+only when the flag is set); `sendCodecSupport` appends `,2` (mSBC) to `AT+BAC=1` from the codec
+mask at instance+0x68. None of it matters for the Tesla path. The WebRTC audio‑processing module
+in gocsdk (`apm_mic_in`, AGC + AECM) serves other Carlinkit products that have their own speaker
+and microphone (`LYLINK_RECORD_*`, `/mic_test.pcm`).
+
+## Wi‑Fi dropout is not "this browser cannot decode video" (26101702)
+
+Three paths turned a lost connection into *Picture mode for an hour or a day*: the decode worker's
+`fetch('h264dec.wasm.txt')` failing while the adapter was unreachable (the module loads when the
+first session starts — i.e. right when the Tesla has just joined the adapter's Wi‑Fi), the worker
+script itself not loading, and — found on the bench — frames queued while the module was still
+loading counting as "undecoded" in the 'slow' verdict (40 % of the offered frames in a second,
+five seconds in a row). Now: the worker retries the module fetch (2, 4, 8 … 30 s, 12 attempts; a
+non‑200 answer counts as transient too — the file is part of this firmware) and reports
+`loading` (the stage shows "loading the video decoder… waiting for the connection"); a failed
+worker script or a GL context that never comes back is reported with `transient: true`; the
+presenter ignores incoming units and stats until the worker is `ready` (the app then asks for a
+key frame); a transient failure rebuilds the worker — a canvas can be transferred only once, so a
+fresh canvas element replaces the old one — up to three times in ten minutes, after which Picture
+is used for ten minutes and Video is tried again (`videoHeld`), never persisted. Only a module that
+does not instantiate, no WebAssembly SIMD or no WebGL still means "cannot decode" (for a day). The
+GL‑lost clock also no longer runs while the page is hidden (a hidden tab loses its GPU context
+routinely). Bench: devserver `--wasm-fail 3` (503 ×3) → three retries, module at 14 s, key frame,
+27 fps, no fallback, nothing persisted.
+
+## Rust UI server bench (`rust/t2cui`, 2026-10-19)
+
+The lylinkui replacement runs on the adapter beside the stock pieces for bench work:
+`rust/t2cui/run.sh start` pushes `t2c_dev.sh` and the binary to /tmp, stops `tesla`, runs t2cui on
+`0.0.0.0:8081` (stock binds `101.200.208.6:80`; busybox httpd has `192.168.3.1:80`) and starts
+lylinkapp; `run.sh stop` puts lylinkui back (hostapd restarts, rejoin the Wi-Fi). Vendor facts that
+matter for it are in rust/README.md (callback table, cmd ids, key 0x600 = key frame, the IDR
+inside the type-14 event, the import stubs for the section-header-less device libs).
+
+## DNS over the adapter: the phone's resolver is slow (2026-10-19)
+
+"Claude Code does not work on the adapter's Wi-Fi, the browser does": every UDP/53 query from a
+hotspot client is REDIRECTed to `t2cd`, which forwarded only to the resolver udhcpc got from the
+iPhone's PAN (172.20.10.1). That resolver -- the phone's hotspot DNS proxy over LTE and Bluetooth --
+regularly stays silent for seconds, so after the 2.5 s timeout t2cd answered SERVFAIL
+(`api.anthropic.com: no answer from [172.20.10.1:53], SERVFAIL`, with Adobe, Datadog and Apple
+names in the same second). Node's getaddrinfo turns SERVFAIL into ENOTFOUND/EAI_AGAIN and the CLI
+fails; Chrome's own resolver retries and caches, so pages kept loading. Fix (t2cd, bench-tested,
+ships from 26101707): 8.8.8.8 and 1.1.1.1 are always appended after the PAN resolver, so a silent
+first server means a retry elsewhere, not SERVFAIL. Also measured on the hotspot: TLS handshake to
+the API 3.4 s, upload 56 KB/s (~450 kbit/s) -- the PAN is slow, every Claude Code request carries
+the whole conversation, expect long turns. TCP/53 is not forwarded yet (`connection refused`).
+
+## Rust UI opt-in (`/mnt/UDISK/t2c_ui_rust`, 26101707)
+
+`app/lyLoadModule.sh` starts `app/t2cui --log /tmp/t2cui.log` instead of `/tmp/lylink/tesla -s`
+when the flag exists (phone page: `t2c.cgi?a=flag&f=ui_rust&v=1`, `v=` clears; reboot to switch).
+t2cui binds 101.200.208.6:80 like stock, serves `/tmp/lylink/www`, writes /tmp/hostapd.conf and
+starts hostapd when missing, hands the credentials to the vendor library (lylinkapp -> iAP), and
+runs the CarPlay session through liblylinkui in-process. The watchdog counts it as the UI
+(`lylinkui_alive`, health `ui=`), relaunches it after two missing checks, and `?a=cat&f=t2cui`
+shows its log. 26101711 also listens on `0.0.0.0:8080`, so `http://192.168.3.1:8080/` reaches the CarPlay page
+from any hotspot client without the adapter's DNS (a Mac with a wired interface included); the
+car-app icon in CarPlay arrives as vendor callback 19 (stock: icon id `sr..` -> Siri key 0x300,
+otherwise page link 1 = the page's own menu, the phone keeps streaming), the page's "smooth" FPS is start-struct flags 0x2910 (standard 0x3910), night is +0x14 (0/2),
+driver side +4, and picture mode (MJPEG) is refused with a page reload. 26101712: the page home has
+"Restart adapter" (page cmd 10, Rust UI only), a car-identity change copies `www/icon/<id>.png` to
+`/tmp/lylink/home.png` and restarts the session (how stock applies the icon), the phone page sends
+a Tesla browser (`navigator.userAgent` contains "Tesla") to `http://192.168.3.1:8080/`. 26101715:
+the page home is a big "Open CarPlay" button on top, status and steps, QR at the bottom; the
+restart-adapter row sits at the bottom of the System page (the mic test page link is gone).
+26101710: LEDs, Bluetooth glue and PAN are in, so the flag gives the complete boot experience
+(verified cold boots: UI at 10 s, phone linked at 16 s, PAN at 21 s). Entry points are HTTP only
+(`http://carplay.internal/`, `http://tespush.com/`, `http://101.200.208.6/`): stock answered
+`https://tespush.com` on 443 with the vendor certificate and redirected http there; t2cui does
+not, so a car bookmark on https must move to `http://carplay.internal/` before the default
+switch. Known gaps in 26101707/08 while the flag was on: no Bluetooth PAN management (stock lylinkui's
+gocsdk module runs `AT#NC` + udhcpc on bt-pan -> no internet through the phone, so the DNS
+forwarder has only the public resolvers, unreachable), no LED control, no firmware hand-off from
+the car page (the phone page still updates), night hint not forwarded. Images now use 1 MB
+squashfs blocks (tools/build.sh, `T2C_SQFS_BLOCK`): the two Rust binaries pushed the 256 KB build
+over the 0x640000 customer partition; build.sh refuses an image that does not fit. 26101708: 6,508,544 of 6,553,600 bytes -- 45 KB spare;
+the next bytes have to come from merging t2cd into t2cui or trimming (t2cd stays static: its pty
+shell uses `Command` with `pre_exec`, which the device musl's missing posix_spawn_*_addchdir_np
+makes a dynamic link fail).
+
+## LEDs (mapped on the bench 2026-10-19, user watching)
+
+Sysfs, not ioctl: `/sys/class/misc/ly_misc_dev/ly/{wifi_led,link_led,model_led,sys_led}` take
+`0xRRGGBB` (also the brightness): `wifi_led` = the Wi-Fi LED, `link_led` = the device LED,
+`model_led` = the antenna LED, `sys_led` = power (hardware, 0x4000 at boot). 0x4000 green, 0x40
+blue, 0x400000 red, 0 off; 0x2000/0x1000 dim green, 0x8000 bright. Stock with a phone attached:
+Wi-Fi green, device green, antenna blue. lylinkui's ioctls 0x4c00-0x4c02 on `/dev/ly_misc_dev`
+return 0 but change nothing visible on this unit; `0x4c10`/`0x4c80..83` carry a 56-byte key/power-
+button struct ("powerkey do reboot", "count down", "enter test mode"); other codes: `0x701/0x702/
+0x707` (crypto/IC check), `0x703` (`check_funcs`), `0x705` (`set_btpan_mode`), `0x720`
+(`lycrypto_check`). t2cui (`leds.rs`): Wi-Fi green while hostapd runs, device green while a phone
+session exists, antenna blue while gocsdk reports the phone connected; `GET /led?name=&v=0x..`
+writes a raw value for bench checks.

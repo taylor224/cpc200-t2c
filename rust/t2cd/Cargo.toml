@@ -1,0 +1,16 @@
+[package]
+name = "t2cd"
+version = "0.1.0"
+edition = "2021"
+description = "Carlinkit T2C sidecar: DNS forwarder for the car (carplay.internal, setting.internal), nat redirect keeper"
+license = "MIT"
+publish = false
+
+[dependencies]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

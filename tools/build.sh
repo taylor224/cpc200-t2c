@@ -59,7 +59,7 @@ EOF
 find "$WORK/customer/app/www" -type f -exec chmod 755 {} +   # match original image (all 0755)
 find "$WORK/customer/app/www" -type d -exec chmod 755 {} +
 
-echo "== patch app/lylinkui (DNS for *.internal, access-unit leak fix, one WebSocket message per access unit; T2C_WS_PATCH=0 drops the last one)"
+echo "== patch app/lylinkui (DNS for *.internal, access-unit leak fix, one WebSocket message per access unit, session survives the page, no AP sleep; T2C_WS_PATCH=0 drops the WebSocket one)"
 python3 tools/patch_lylinkui.py "$WORK/customer/app/lylinkui"
 chmod 755 "$WORK/customer/app/lylinkui"
 
@@ -79,8 +79,16 @@ fi
 anchor = 'echo "run gocsdk BT_NAME=$BT_NAME"\n'
 assert s.count(anchor) == 1 and s.count('-N$BT_NAME') == 2, 'unexpected blink.sh'
 s = s.replace(anchor, hook + anchor).replace('-N$BT_NAME', '-N"$BT_NAME"')
+# The watchdog starts right after gocsdk (src/app/t2c_watchdog.sh): gocsdk/hostapd relaunch, health log.
+assert s.rstrip('\n').endswith('\nfi'), 'unexpected blink.sh tail'
+s = s.rstrip('\n') + ('\n\n# T2C firmware: watchdog (gocsdk / hostapd relaunch, health log) -- src/app/t2c_watchdog.sh\n'
+                       '[ -x "$WORKDIR/t2c_watchdog.sh" ] && "$WORKDIR/t2c_watchdog.sh" "$BT_NAME" </dev/null >/dev/null 2>&1 &\n'
+                       '# T2C firmware: DNS forwarder for the car (rust/t2cd); an uploaded /tmp/t2cd wins over the firmware copy\n'
+                       'T2CD="$WORKDIR/t2cd"; [ -x /tmp/t2cd ] && T2CD=/tmp/t2cd\n'
+                       '[ -x "$T2CD" ] && "$T2CD" </dev/null >/dev/null 2>&1 &\n')
 open(p, 'w').write(s)
 EOF
+sh -n "$WORK/customer/app/blink.sh"
 chmod 755 "$WORK/customer/app/blink.sh"
 
 if [ -n "${T2C_VERSION:-}" ]; then
@@ -117,6 +125,49 @@ head -1 src/app/hostapd | grep -q '^#!/bin/sh' || { echo "src/app/hostapd must s
 sh -n src/app/hostapd
 cp src/app/hostapd "$WORK/customer/app/hostapd"
 chmod 755 "$WORK/customer/app/hostapd"
+echo "== app/t2c_watchdog.sh: gocsdk/hostapd relaunch and health log (src/app/t2c_watchdog.sh)"
+grep -q $'\r' src/app/t2c_watchdog.sh && { echo "src/app/t2c_watchdog.sh has CRLF line endings" >&2; exit 1; }
+head -1 src/app/t2c_watchdog.sh | grep -q '^#!/bin/sh' || { echo "src/app/t2c_watchdog.sh must start with #!/bin/sh" >&2; exit 1; }
+sh -n src/app/t2c_watchdog.sh
+cp src/app/t2c_watchdog.sh "$WORK/customer/app/t2c_watchdog.sh"
+chmod 755 "$WORK/customer/app/t2c_watchdog.sh"
+T2CD=rust/t2cd/target/armv7-unknown-linux-musleabihf/release/t2cd
+if [ "${T2C_NO_T2CD:-0}" = 1 ]; then
+  echo "== app/t2cd: left out (T2C_NO_T2CD=1)"
+elif [ -f "$T2CD" ]; then
+  echo "== app/t2cd: DNS forwarder sidecar ($(stat -f %z "$T2CD" 2>/dev/null || stat -c %s "$T2CD") bytes, static ARMv7 musl)"
+  head -c 20 "$T2CD" | xxd -p | grep -q '^7f454c46010101' || { echo "$T2CD is not a 32-bit little-endian ELF" >&2; exit 1; }
+  cp "$T2CD" "$WORK/customer/app/t2cd"; chmod 755 "$WORK/customer/app/t2cd"
+else
+  echo "== app/t2cd: NOT built (cd rust/t2cd && cargo build --release --target armv7-unknown-linux-musleabihf); image goes without the DNS forwarder"
+fi
+echo "== app/t2c_dev.sh: bench helper (stop/start the vendor UI stack with the boot environment)"
+sh -n src/app/t2c_dev.sh
+install -m 755 src/app/t2c_dev.sh "$WORK/customer/app/t2c_dev.sh"
+T2CUI=rust/t2cui/target/armv7-unknown-linux-musleabihf/release/t2cui
+if [ -f "$T2CUI" ] && [ "${T2C_NO_T2CUI:-0}" != 1 ]; then
+  echo "== app/t2cui: Rust UI server ($(stat -f %z "$T2CUI" 2>/dev/null || stat -c %s "$T2CUI") bytes, dynamic musl); opt-in with /mnt/UDISK/t2c_ui_rust"
+  head -c 20 "$T2CUI" | xxd -p | grep -q '^7f454c46010101' || { echo "$T2CUI is not a 32-bit little-endian ELF" >&2; exit 1; }
+  cp "$T2CUI" "$WORK/customer/app/t2cui"; chmod 755 "$WORK/customer/app/t2cui"
+else
+  echo "== app/t2cui: NOT built (cd rust/t2cui && cargo build --release --target armv7-unknown-linux-musleabihf); image goes without the Rust UI"
+fi
+echo "== app/lyLoadModule.sh: start app/t2cui instead of lylinkui when /mnt/UDISK/t2c_ui_rust exists (rewrite P5 opt-in)"
+python3 - "$WORK/customer/app/lyLoadModule.sh" <<'EOF2'
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = "/tmp/lylink/tesla -s > /dev/null 2>&1 &\n"
+assert s.count(old) == 1, "lyLoadModule.sh tesla line not found"
+new = ("if [ -e /mnt/UDISK/t2c_ui_rust ] && [ -x $WORKDIR/t2cui ]; then\n"
+       "\techo \" run t2cui (Rust UI, /mnt/UDISK/t2c_ui_rust)\"\n"
+       "\t$WORKDIR/t2cui --log /tmp/t2cui.log > /dev/null 2>&1 &\n"
+       "else\n"
+       "\t/tmp/lylink/tesla -s > /dev/null 2>&1 &\n"
+       "fi\n")
+open(p, "w").write(s.replace(old, new))
+EOF2
+sh -n "$WORK/customer/app/lyLoadModule.sh"
+grep -q "t2c_ui_rust" "$WORK/customer/app/lyLoadModule.sh" || { echo "lyLoadModule.sh t2cui patch failed" >&2; exit 1; }
 echo "== app/t2c_usb.sh: USB device mode (adb) helper for bench work"
 grep -q $'\r' src/app/t2c_usb.sh && { echo "src/app/t2c_usb.sh has CRLF line endings" >&2; exit 1; }
 sh -n src/app/t2c_usb.sh
@@ -154,7 +205,15 @@ find "$WORK/customer/ota/www" -type d -exec chmod 755 {} +
 
 echo "== mksquashfs"
 rm -f "$WORK/customer.sqfs"
-mksquashfs "$WORK/customer" "$WORK/customer.sqfs" -comp xz -b 262144 -noappend -all-root -no-xattrs -no-progress -quiet -pf "$WORK/pseudo.txt"
+# Block size: stock uses 256 KB. 1 MB blocks with a matching dictionary pack the same tree ~3 %
+# tighter (the customer partition is 0x640000 = 6,553,600 bytes and the Rust binaries pushed the
+# 256 KB build over it); the 4.9 kernel's squashfs reads any block size up to 1 MB. T2C_SQFS_BLOCK
+# overrides.
+SQFS_BLOCK=${T2C_SQFS_BLOCK:-1048576}
+mksquashfs "$WORK/customer" "$WORK/customer.sqfs" -comp xz -b "$SQFS_BLOCK" -Xdict-size "$SQFS_BLOCK" -noappend -all-root -no-xattrs -no-progress -quiet -pf "$WORK/pseudo.txt"
+CUST_SZ=$(stat -f %z "$WORK/customer.sqfs" 2>/dev/null || stat -c %s "$WORK/customer.sqfs")
+echo "   customer squashfs: $CUST_SZ bytes (partition 6553600, block $SQFS_BLOCK)"
+[ "$CUST_SZ" -le 6553600 ] || { echo "customer squashfs does not fit the 0x640000 partition" >&2; exit 1; }
 ORIG=$(stat -f %z "$WORK/swu/customer" 2>/dev/null || stat -c %s "$WORK/swu/customer")
 NEW=$(stat -f %z "$WORK/customer.sqfs" 2>/dev/null || stat -c %s "$WORK/customer.sqfs")
 echo "   customer: original $ORIG bytes -> new $NEW bytes"

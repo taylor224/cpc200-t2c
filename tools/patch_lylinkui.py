@@ -51,6 +51,27 @@ It also changes how the H.264 stream leaves the WebSocket (callback_tsl, 0x16c6c
     one write. The page accepts type 100 at any size; larger units still arrive as
     101/102/103 and are reassembled as before.
 
+Three more changes keep the CarPlay session alive across the car browser (2026-10-17):
+
+  * when the page's WebSocket closes (Tesla closes or hides the browser, a reload, a second
+    page taking over) stock lylinkui calls lylinkapi_cmd(2): lylinkapp "takes" the screen
+    (CarPlay screen mode -> accessory), the video stops and the session is torn down, and
+    the iPhone has to set everything up again when the page comes back -- navigation routes
+    are lost on the way. Now the call is made only while no phone is attached (g+0x30c ==
+    0: the adapter's own menu stream, which would otherwise keep encoding for nobody); with
+    a phone the session simply runs on, the stream is dropped in the enqueue wrapper (patch
+    10) and the returning page gets a key frame;
+  * the page command VIDEO (cmd 0) called lylinkapi_cmd(3) ("untake", a new screen setup)
+    whatever the state and moved the link state 1/2 -> 3; now a running stream (link == 2)
+    is left alone -- the page only needs the key frame the handler asks for -- and only
+    link 1 becomes 3;
+  * ly_misc_thread's idle sleep is gone: stock counted 120 s (600 s after boot) with no
+    phone, no page and no video, then ran `killall hostapd` and left the access point off
+    until the phone came back over Bluetooth and asked for it. The relaunch went through
+    the hostapd wrapper and the Bluetooth path; when either failed the adapter sat there
+    without Wi-Fi ("the adapter's Wi-Fi is off and nothing connects"). The branch that
+    enters the sleep is now unconditional-skip, so the countdown just wraps.
+
 The script refuses to touch a file whose SHA-256 is not the known original, so it cannot
 misapply offsets to a different build.
 """
@@ -78,6 +99,8 @@ FREE_PLT = 0x11ec0        # free@plt
 LWS_ON_WRITABLE_PLT = 0x12190   # lws_callback_on_writable@plt
 LWS_SERVICE_PLT = 0x11e30       # lws_service@plt (main loop, 0x1a868)
 LYLINKAPI_KEY_PLT = 0x12028     # lylinkapi_key@plt; (0x600, 0) + (0x600, 1) asks the phone for a key frame (page cmd 8)
+LYLINKAPI_CMD_PLT = 0x12274     # lylinkapi_cmd@plt: 2 take the screen (page gone), 3 untake (page cmd VIDEO), 12 restart hostapd
+G_PHONE = 0x30c                 # g+0x30c: a phone is attached (the link JSON's "phone")
 QUEUE_LIMIT = 10          # access units allowed to wait for the page (~330 ms at 30 fps)
 G_REF = 0x3d11c           # 'add r3, pc, r3 ; = 0x3d11c' then [r3+4] is the lylinkui global struct
 CARPLAY = b'\x07carplay\x08internal\x00'
@@ -269,11 +292,36 @@ def main():
         ('label', 'LIT_F3'), ('lit', FLAG_VA, 'ADD_F3'),
     ]
     hook, haddr = build(hook_va, consumer if hook_mode == 'writeable' else loop_hook)
-    end = hook_va + len(hook) - TEXT_VA
+    # 12. CLOSED of the current page (callback_tsl 0x19618..0x19664): keep the CarPlay session while a
+    #     phone is attached; without one behave like stock (lylinkapi_cmd(2) stops the menu stream).
+    # 14. page cmd VIDEO (0x181e8..0x18290): no "untake" (lylinkapi_cmd(3)) while the stream already
+    #     runs (link == 2); the key-frame request that follows is all the page needs.
+    extra_va = hook_va + len(hook)
+    extra_prog = [
+        ('label', 'A'), ('ldrpc', 3, 'LIT_GA'), ('label', 'ADD_GA'), ('w', 0xE08F3003), ('w', 0xE5933004),  # r3 = g
+        ('w', 0xE593330C), ('w', 0xE3530000), ('w', 0x112FFF1E),            # ldr r3, [g+0x30c]; cmp r3, #0; bxne lr
+        ('w', 0xE3A00002), ('b', AL, LYLINKAPI_CMD_PLT),                      # mov r0, #2; b lylinkapi_cmd (tail)
+        ('label', 'C'), ('ldrpc', 3, 'LIT_GC'), ('label', 'ADD_GC'), ('w', 0xE08F3003), ('w', 0xE5933004),  # r3 = g
+        ('w', 0xE5933000), ('w', 0xE3530002), ('w', 0x012FFF1E),            # ldr r3, [g]; cmp r3, #2; bxeq lr
+        ('b', AL, LYLINKAPI_CMD_PLT),                                        # b lylinkapi_cmd (r0 = 3 from the caller)
+        ('label', 'LIT_GA'), ('lit', G_REF, 'ADD_GA'),
+        ('label', 'LIT_GC'), ('lit', G_REF, 'ADD_GC'),
+    ]
+    extra, xaddr = build(extra_va, extra_prog)
+    end = extra_va + len(extra) - TEXT_VA
     assert not any(data[TEXT_SZ:end]) and end < DATA_OFF
     put(NAMES_VA, names)
     put(code_va, wrapper)
     put(hook_va, hook)
+    put(extra_va, extra)
+    put(0x1965c, bl_insn(0x1965c, xaddr['A']), expect=struct.pack('<I', 0xE3A00002))         # was: mov r0, #2
+    put(0x19660, MOV_R0_R0, expect=bl_insn(0x19660, LYLINKAPI_CMD_PLT))                        # was: bl lylinkapi_cmd
+    put(0x18214, dp(AL, CMP, 1, 2, 0, 1), expect=dp(AL, CMP, 1, 2, 0, 0))                      # link == 1 (was != 0) ...
+    put(0x18218, struct.pack('<I', 0x03A02003), expect=struct.pack('<I', 0x13A02003))         #   moveq r2, #3 (was movne)
+    put(0x1821c, struct.pack('<I', 0x05832000), expect=struct.pack('<I', 0x15832000))         #   streq r2, [r3] (was strne)
+    put(0x1825c, bl_insn(0x1825c, xaddr['C']), expect=bl_insn(0x1825c, LYLINKAPI_CMD_PLT))    # untake through the cave
+    # 13. ly_misc_thread (0x1665c): `cmp r7, #1; bne back` -> always back: the AP never goes to sleep
+    put(0x16660, b_insn(AL, 0x16660, 0x163ec), expect=b_insn(NE, 0x16660, 0x163ec))
     put(0x1325c, bl_insn(0x1325c, waddr['W_IDR']), expect=bl_insn(0x1325c, ENQUEUE))
     put(0x132c8, bl_insn(0x132c8, waddr['W_P']), expect=bl_insn(0x132c8, ENQUEUE))
     if hook_mode == 'writeable':
@@ -319,13 +367,13 @@ def main():
     if out != expected:
         sys.exit('patched sha256 %s does not match the expected %s' % (out, expected))
     open(path, 'r+b').write(bytes(data))
-    print('lylinkui patched: dnsd answers carplay.internal and setting.internal%s (%s)'
+    print('lylinkui patched: dnsd answers carplay.internal and setting.internal, session survives the page, no AP sleep%s (%s)'
           % ('; one WebSocket message per access unit' if ws_patch else '', out[:16]))
 
 
 ORIGINAL_SHA256 = '37ce2c3a412545cb1e0cbb28c87ec6a8a7558332b99e20ab9f88a6c794e11e98'
-PATCHED_SHA256 = '6a7d19a75f20e349eb803703976b65ff0618364c79fcad78cc26ccafa0ac02ba'      # patches 1-6, 8, 9, 10/11 (loop hook)
-PATCHED_SHA256_WS = '364c02d1bcc4dcbfb1d39f18f0020b6ba33433eb60a6771a07d348b64e3be386'   # + patch 7 (T2C_WS_PATCH=1)
+PATCHED_SHA256 = '8ae4e3bc41b8e22a9878942f77ab6717c7b3ff7ea7e5fb9b836917358329c868'      # patches 1-6, 8, 9, 10/11 (loop hook), 12-14
+PATCHED_SHA256_WS = 'bbbcebea0b2227b6fcd254b81dfaa8d264c391cbc983d4c2fb77ebeb12f193a2'   # + patch 7 (T2C_WS_PATCH=1)
 
 if __name__ == '__main__':
     main()

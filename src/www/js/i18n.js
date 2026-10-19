@@ -22,7 +22,7 @@
     'home.step1': 'Turn on Bluetooth and Wi‑Fi on the iPhone.',
     'home.step2': 'In Settings › Bluetooth, choose',
     'home.step3': 'Accept the pairing request. CarPlay starts automatically.',
-    'home.bt_name': 'Bluetooth name', 'home.show_qr': 'Show QR code', 'home.hide_qr': 'Hide QR code',
+    'home.bt_name': 'Bluetooth name', 'home.show_qr': 'Show QR code', 'home.hide_qr': 'Hide QR code', 'home.reboot': 'Restart adapter', 'home.reboot_hint': 'Power-cycles the adapter; CarPlay reconnects in about a minute.', 'home.reboot_btn': 'Restart', 'home.reboot_confirm': 'Restart the adapter? CarPlay reconnects in about a minute.',
     'home.qr_hint': 'Scan with the iPhone camera', 'home.connecting': 'Connecting…',
     'home.waiting': 'Waiting for iPhone', 'home.connected': 'iPhone connected',
     'home.starting': 'Starting CarPlay…', 'home.open_carplay': 'Open CarPlay', 'home.car_ui': 'iPhone connected · settings',
@@ -93,7 +93,10 @@
     'dlg.yes': 'Yes', 'video.nosignal': 'No picture from iPhone',
     'video.backlist': 'Unauthorized device', 'video.touch_hint': 'Tap to interact',
 
-    'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': 'decode', 'stat.dropped': 'dropped', 'stat.mode': 'mode'
+    'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': 'decode', 'stat.dropped': 'dropped', 'stat.mode': 'mode',
+    // 26101701: takeover retry, decoder step-down, event log
+    'home.retry_in': 'reconnecting in {s} s', 'video.fps_lowered': 'This browser cannot decode Smooth at this picture size. Frame rate set to Standard.', 'video.res_lowered': 'Video decoding is too slow at this picture size. Picture size set to Balanced.', 'about.events': 'Recent events', 'about.events_hint': 'Connections, takeovers, session restarts, step-downs', 'about.events_show': 'Show', 'about.events_none': 'No events recorded yet.', 'about.events_clear': 'Clear',
+    'video.loading': 'Loading the video decoder… (waiting for the connection)', 'video.transient': 'The video decoder could not be set up (connection or GPU). Using Picture for now; Video is tried again in 10 minutes.'
   };
 
   T.ko = {
@@ -106,7 +109,7 @@
     'home.step1': 'iPhone에서 Bluetooth와 Wi‑Fi를 켭니다.',
     'home.step2': '설정 › Bluetooth에서 다음 기기를 선택합니다:',
     'home.step3': '페어링 요청을 수락하면 CarPlay가 자동으로 시작됩니다.',
-    'home.bt_name': '블루투스 이름', 'home.show_qr': 'QR 코드 보기', 'home.hide_qr': 'QR 코드 숨기기',
+    'home.bt_name': '블루투스 이름', 'home.show_qr': 'QR 코드 보기', 'home.hide_qr': 'QR 코드 숨기기', 'home.reboot': '어댑터 재부팅', 'home.reboot_hint': '어댑터를 껐다 켭니다. CarPlay는 1분쯤 뒤에 다시 연결됩니다.', 'home.reboot_btn': '재부팅', 'home.reboot_confirm': '어댑터를 재부팅할까요? CarPlay는 1분쯤 뒤에 다시 연결됩니다.',
     'home.qr_hint': 'iPhone 카메라로 스캔하세요', 'home.connecting': '연결 중…',
     'home.waiting': 'iPhone을 기다리는 중', 'home.connected': 'iPhone 연결됨',
     'home.starting': 'CarPlay 시작 중…', 'home.open_carplay': 'CarPlay 열기', 'home.car_ui': 'iPhone 연결됨 · 설정',
@@ -177,7 +180,10 @@
     'dlg.yes': '예', 'video.nosignal': 'iPhone에서 화면이 오지 않습니다',
     'video.backlist': '인증되지 않은 기기', 'video.touch_hint': '탭하여 조작',
 
-    'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': '디코딩', 'stat.dropped': '드롭', 'stat.mode': '모드'
+    'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': '디코딩', 'stat.dropped': '드롭', 'stat.mode': '모드',
+    // 26101701: takeover retry, decoder step-down, event log
+    'home.retry_in': '{s}초 후 다시 연결', 'video.fps_lowered': '이 브라우저가 이 화면 크기에서 부드럽게 모드를 디코딩하지 못합니다. 프레임 속도를 표준으로 낮췄습니다.', 'video.res_lowered': '이 화면 크기에서는 영상 디코딩이 너무 느립니다. 화면 크기를 균형으로 낮췄습니다.', 'about.events': '최근 이벤트', 'about.events_hint': '연결, 화면 전환, 세션 재시작, 자동 하향 기록', 'about.events_show': '보기', 'about.events_none': '기록된 이벤트가 없습니다.', 'about.events_clear': '지우기',
+    'video.loading': '영상 디코더 불러오는 중… (연결 대기)', 'video.transient': '영상 디코더를 준비하지 못했습니다(연결 또는 GPU 문제). 당분간 이미지 방식을 사용하고 10분 후 비디오를 다시 시도합니다.'
   };
 
   T.ja = {
@@ -190,7 +196,7 @@
     'home.step1': 'iPhone の Bluetooth と Wi‑Fi をオンにします。',
     'home.step2': '設定 › Bluetooth で次のデバイスを選択します:',
     'home.step3': 'ペアリング要求を承認すると CarPlay が自動的に開始します。',
-    'home.bt_name': 'Bluetooth 名', 'home.show_qr': 'QR コードを表示', 'home.hide_qr': 'QR コードを隠す',
+    'home.bt_name': 'Bluetooth 名', 'home.show_qr': 'QR コードを表示', 'home.hide_qr': 'QR コードを隠す', 'home.reboot': 'アダプターを再起動', 'home.reboot_hint': 'アダプターを再起動します。CarPlay は約 1 分後に再接続します。', 'home.reboot_btn': '再起動', 'home.reboot_confirm': 'アダプターを再起動しますか？CarPlay は約 1 分後に再接続します。',
     'home.qr_hint': 'iPhone のカメラでスキャン', 'home.connecting': '接続中…',
     'home.waiting': 'iPhone を待っています', 'home.connected': 'iPhone 接続済み',
     'home.starting': 'CarPlay を開始中…', 'home.open_carplay': 'CarPlay を開く', 'home.car_ui': 'iPhone 接続済み · 設定',
@@ -261,7 +267,10 @@
     'dlg.yes': 'はい', 'video.nosignal': 'iPhone から映像がありません',
     'video.backlist': '未承認のデバイス', 'video.touch_hint': 'タップして操作',
 
-    'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': 'デコード', 'stat.dropped': 'ドロップ', 'stat.mode': 'モード'
+    'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': 'デコード', 'stat.dropped': 'ドロップ', 'stat.mode': 'モード',
+    // 26101701: takeover retry, decoder step-down, event log
+    'home.retry_in': '{s} 秒後に再接続', 'video.fps_lowered': 'この画面サイズではスムーズをデコードできません。フレームレートを標準にしました。', 'video.res_lowered': 'この画面サイズでは動画のデコードが遅すぎます。画面サイズをバランスにしました。', 'about.events': '最近のイベント', 'about.events_hint': '接続・画面の切り替え・セッション再開・自動調整の記録', 'about.events_show': '表示', 'about.events_none': 'イベントはまだありません。', 'about.events_clear': '消去',
+    'video.loading': '動画デコーダーを読み込み中…（接続待ち）', 'video.transient': '動画デコーダーを準備できませんでした（接続または GPU）。しばらく画像方式を使い、10 分後に動画を再試行します。'
   };
 
   T['zh-CN'] = {
@@ -274,7 +283,7 @@
     'home.step1': '在 iPhone 上打开蓝牙和 Wi‑Fi。',
     'home.step2': '在“设置 › 蓝牙”中选择：',
     'home.step3': '接受配对请求后，CarPlay 会自动启动。',
-    'home.bt_name': '蓝牙名称', 'home.show_qr': '显示二维码', 'home.hide_qr': '隐藏二维码',
+    'home.bt_name': '蓝牙名称', 'home.show_qr': '显示二维码', 'home.hide_qr': '隐藏二维码', 'home.reboot': '重启适配器', 'home.reboot_hint': '重启适配器，CarPlay 大约 1 分钟后重新连接。', 'home.reboot_btn': '重启', 'home.reboot_confirm': '要重启适配器吗？CarPlay 大约 1 分钟后重新连接。',
     'home.qr_hint': '用 iPhone 相机扫描', 'home.connecting': '连接中…',
     'home.waiting': '等待 iPhone', 'home.connected': 'iPhone 已连接',
     'home.starting': '正在启动 CarPlay…', 'home.open_carplay': '打开 CarPlay', 'home.car_ui': 'iPhone 已连接 · 设置',
@@ -345,7 +354,10 @@
     'dlg.yes': '是', 'video.nosignal': '没有来自 iPhone 的画面',
     'video.backlist': '未授权设备', 'video.touch_hint': '点按以操作',
 
-    'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': '解码', 'stat.dropped': '丢帧', 'stat.mode': '模式'
+    'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': '解码', 'stat.dropped': '丢帧', 'stat.mode': '模式',
+    // 26101701: takeover retry, decoder step-down, event log
+    'home.retry_in': '{s} 秒后重新连接', 'video.fps_lowered': '此浏览器无法在当前画面尺寸下解码“流畅”模式，帧率已改为标准。', 'video.res_lowered': '当前画面尺寸下视频解码过慢，画面尺寸已改为均衡。', 'about.events': '最近事件', 'about.events_hint': '连接、屏幕切换、会话重启、自动降级记录', 'about.events_show': '查看', 'about.events_none': '暂无事件记录。', 'about.events_clear': '清除',
+    'video.loading': '正在加载视频解码器…（等待连接）', 'video.transient': '无法准备视频解码器（连接或 GPU 问题）。暂时使用图片模式，10 分钟后重试视频。'
   };
 
   T['zh-TW'] = {
@@ -358,7 +370,7 @@
     'home.step1': '在 iPhone 上開啟藍牙與 Wi‑Fi。',
     'home.step2': '在「設定 › 藍牙」中選擇：',
     'home.step3': '接受配對要求後，CarPlay 會自動啟動。',
-    'home.bt_name': '藍牙名稱', 'home.show_qr': '顯示 QR Code', 'home.hide_qr': '隱藏 QR Code',
+    'home.bt_name': '藍牙名稱', 'home.show_qr': '顯示 QR Code', 'home.hide_qr': '隱藏 QR Code', 'home.reboot': '重新啟動轉接器', 'home.reboot_hint': '重新啟動轉接器，CarPlay 約 1 分鐘後會重新連線。', 'home.reboot_btn': '重新啟動', 'home.reboot_confirm': '要重新啟動轉接器嗎？CarPlay 約 1 分鐘後會重新連線。',
     'home.qr_hint': '用 iPhone 相機掃描', 'home.connecting': '連線中…',
     'home.waiting': '等待 iPhone', 'home.connected': 'iPhone 已連線',
     'home.starting': '正在啟動 CarPlay…', 'home.open_carplay': '開啟 CarPlay', 'home.car_ui': 'iPhone 已連線 · 設定',
@@ -429,7 +441,10 @@
     'dlg.yes': '是', 'video.nosignal': '沒有來自 iPhone 的畫面',
     'video.backlist': '未授權裝置', 'video.touch_hint': '點按以操作',
 
-    'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': '解碼', 'stat.dropped': '丟幀', 'stat.mode': '模式'
+    'stat.fps': 'fps', 'stat.kbps': 'kbit/s', 'stat.decode': '解碼', 'stat.dropped': '丟幀', 'stat.mode': '模式',
+    // 26101701: takeover retry, decoder step-down, event log
+    'home.retry_in': '{s} 秒後重新連線', 'video.fps_lowered': '此瀏覽器無法在目前畫面尺寸下解碼「流暢」模式，畫面更新率已改為標準。', 'video.res_lowered': '目前畫面尺寸下影片解碼過慢，畫面尺寸已改為均衡。', 'about.events': '最近事件', 'about.events_hint': '連線、螢幕切換、工作階段重啟、自動降級記錄', 'about.events_show': '檢視', 'about.events_none': '尚無事件記錄。', 'about.events_clear': '清除',
+    'video.loading': '正在載入影片解碼器…（等待連線）', 'video.transient': '無法準備影片解碼器（連線或 GPU 問題）。暫時使用圖片模式，10 分鐘後重試影片。'
   };
 
   var current = 'en';

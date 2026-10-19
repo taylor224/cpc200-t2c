@@ -40,8 +40,11 @@
     this.queue = [];              // H.264: access units waiting for the worker, oldest first
     this.inflight = false;        // H.264: access unit posted, 'done' not yet received
     this.lost = false;            // H.264: a frame was dropped since the last one posted
+    this.paused = false;          // H.264: page hidden, units are dropped without decoding
+    this.rxTotal = 0;             // H.264 units received since start (never reset; resume check)
     this.worker = null; this.workerReady = false;
-    this.broken = false;          // the worker failed; its canvas cannot be handed to a new one, so H.264 is out until reload
+    this.broken = false;          // the worker failed for a reason that will not go away (no WebAssembly SIMD, no WebGL …)
+    this.loading = false;         // the worker is still fetching its module (network)
     this.slowSeconds = 0;
     this.rxSec = 0;               // H.264 frames received since the worker's last stats report
     this.showStats = false;
@@ -257,32 +260,59 @@
     this.slowSeconds = 0; this.rxSec = 0;
     this.showSurface('worker');
     if (this.worker) { this.worker.postMessage({ id: 'clear' }); return; }
+    this.spawnWorker();
+  };
+
+  /** Create the decode worker. A canvas can be transferred only once, so a worker that has to be
+   *  replaced (its script failed to load while the Wi-Fi was away, its GL context never came back)
+   *  gets a fresh canvas element in place of the old one. */
+  VideoPresenter.prototype.spawnWorker = function () {
+    var self = this;
     try {
+      if (this.canvasWorker.__transferred) {
+        var fresh = document.createElement('canvas');
+        fresh.id = this.canvasWorker.id; fresh.className = this.canvasWorker.className;
+        fresh.style.objectFit = this.canvasWorker.style.objectFit;
+        this.canvasWorker.parentNode.replaceChild(fresh, this.canvasWorker);
+        this.canvasWorker = fresh;
+      }
       var off = this.canvasWorker.transferControlToOffscreen();
+      this.canvasWorker.__transferred = true;
       this.worker = new Worker('js/h264worker.js');
       this.worker.onmessage = function (ev) { self.onWorkerMessage(ev.data); };
-      this.worker.onerror = function (e) { self.broken = true; self.onMessage('h264error', String(e && e.message)); };
+      // The script itself could not be loaded or the worker crashed: not a capability verdict.
+      this.worker.onerror = function (e) { self.workerGone('worker: ' + String(e && e.message), true); };
       var simd = VideoPresenter.wasmSimd();
       try { if (localStorage.getItem('t2c.nosimd') === '1') simd = false; } catch (e) { /* ignore */ }
       this.worker.postMessage({ id: 'init', canvas: off, simd: simd }, [off]);
     } catch (e) {
       this.worker = null; this.broken = true;
-      this.onMessage('h264error', String(e && e.message));
+      this.onMessage('h264error', String(e && e.message), false);
     }
+  };
+
+  /** Drop the worker; the app decides whether to try again (transient) or to fall back. */
+  VideoPresenter.prototype.workerGone = function (message, transient) {
+    if (this.worker) { try { this.worker.terminate(); } catch (e) { /* ignore */ } }
+    this.worker = null; this.workerReady = false; this.loading = false;
+    this.queue = []; this.inflight = false;
+    if (!transient) this.broken = true;
+    this.onMessage('h264error', message, !!transient);
   };
 
   VideoPresenter.prototype.onWorkerMessage = function (d) {
     if (!d) return;
     switch (d.id) {
-      case 'ready': this.workerReady = true; this.onMessage('ready', d.gl2); break;
+      case 'ready': this.workerReady = true; this.loading = false; this.onMessage('ready', d.gl2); break;
+      case 'loading': this.loading = true; this.onMessage('loading', d.attempt, d.message); break;
       case 'done': this.inflight = false; this.postNext(); break;
       case 'size': this.frameW = d.w; this.frameH = d.h; this.onMessage('size', d.w, d.h); break;
       case 'key': this.onMessage('key'); break;
       case 'needkey': this.onMessage('needkey'); break;
       case 'refresh': this.onMessage('refresh'); break;
-      case 'error': this.broken = true; this.onMessage('h264error', d.message); break;
+      case 'error': this.workerGone(d.message, !!d.transient); break;
       case 'stats': {
-        if (this.mode !== 'h264') { this.rxSec = 0; break; }
+        if (this.mode !== 'h264' || !this.workerReady || this.paused) { this.rxSec = 0; this.slowSeconds = 0; break; }
         this.stats.painted += d.dec; this.stats.decodeMs += d.ms; this.stats.decodeN += d.dec;
         // Decoder cannot keep up: more than 40 % of the frames it was offered went undecoded
         // for 5 s. Frames skipped while waiting for a key frame are the stream's fault, not
@@ -306,6 +336,11 @@
   /** Feed one Annex-B access unit (Uint8Array, ownership transferred). */
   VideoPresenter.prototype.feedH264 = function (u8) {
     if (this.mode !== 'h264' || !this.worker) return;
+    this.rxTotal++;
+    if (this.paused) return;      // hidden page: keep the socket, skip the work
+    // Module still loading (the Wi-Fi may have been away): nothing can be decoded yet, and frames
+    // piling up here would read as "decoder too slow". The app asks for a key frame on 'ready'.
+    if (!this.workerReady) return;
     this.stats.rx++; this.stats.bytes += u8.byteLength; this.rxSec++;
     this.queue.push(u8);
     if (this.queue.length > VideoPresenter.H264_GIVEUP) {
@@ -313,6 +348,21 @@
       this.onMessage('refresh');
     }
     this.postNext();
+  };
+
+  /** Page hidden: stop decoding but keep the stream flowing; resume() needs a key frame. */
+  VideoPresenter.prototype.pause = function () {
+    if (this.mode !== 'h264') return;
+    this.paused = true;
+    this.queue = []; this.lost = false; this.slowSeconds = 0; this.rxSec = 0;
+    if (this.worker) this.worker.postMessage({ id: 'pause' });
+  };
+  VideoPresenter.prototype.resume = function () {
+    if (!this.paused) return;
+    this.paused = false;
+    this.slowSeconds = 0; this.rxSec = 0;
+    // skip P-frames until the next IDR (the app asks for one); the last picture stays on screen
+    if (this.worker && this.mode === 'h264') this.worker.postMessage({ id: 'waitkey' });
   };
 
   /** The stream lost an access unit before it reached us (reassembly failure). */
@@ -347,7 +397,7 @@
     if (this.abort) { try { this.abort.abort(); } catch (e) { /* ignore */ } this.abort = null; }
     if (this.img && this.mode === 'img') { this.img.removeAttribute('src'); }
     if (this.worker && this.mode === 'h264') this.worker.postMessage({ id: 'clear' });
-    this.pending = null; this.decoding = false; this.queue = []; this.lost = false;
+    this.pending = null; this.decoding = false; this.queue = []; this.lost = false; this.paused = false;
     this.frameW = 0; this.frameH = 0;     // the next stream reports its size again
     this.mode = 'idle';
     this.stats = this.resetStats();

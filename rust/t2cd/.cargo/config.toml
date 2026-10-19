@@ -1,0 +1,5 @@
+# Static musl build for the adapter (Allwinner V831, Cortex-A7, musl rootfs). No C toolchain needed:
+# rustc's self-contained crt objects + libc.a and the bundled rust-lld do the linking.
+[target.armv7-unknown-linux-musleabihf]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "link-self-contained=yes", "-C", "target-feature=+crt-static", "-C", "target-cpu=cortex-a7"]
