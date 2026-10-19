@@ -1,7 +1,7 @@
 {
-  "appver": "26101531.1508.1",
-  "tsl": "26101531.5.4",
-  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101531.img",
-  "msg": "Stability and latency release: the adapter no longer leaks the CarPlay video stream (which killed and restarted lylinkui every few minutes and took the adapter's DNS and the Bluetooth-PAN internet wit",
-  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101531"
+  "appver": "26101718.1508.1",
+  "tsl": "26101718.5.4",
+  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101718.img",
+  "msg": "DNS no longer fails over the adapter's hotspot (public resolvers always back the phone's), plus an opt-in Rust rewrite of the adapter UI server (t2c_ui_rust flag) with LEDs, Bluetooth and PAN handled ",
+  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101718"
 }
