@@ -1,7 +1,7 @@
 {
-  "appver": "26101720.1508.1",
-  "tsl": "26101720.5.4",
-  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101720.img",
-  "msg": "The Tesla keeps the adapter's Wi-Fi \"online\" whatever the phone's Bluetooth link is doing: its connectivity check is now answered by the adapter in every state.",
-  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101720"
+  "appver": "26101721.1508.1",
+  "tsl": "26101721.5.4",
+  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101721.img",
+  "msg": "Picture mode (MJPEG) is back in the Rust UI: the page's \"Picture\" transport works again, through the same hardware transcoder the vendor UI used.",
+  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101721"
 }
