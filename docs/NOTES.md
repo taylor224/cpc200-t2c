@@ -404,6 +404,12 @@ this kernel): with the flag on, POWER has soft_connect=1 (D+ pull-up) and hs_en=
 b_device=1 session=1 vbus=3 (forced valid), ISCR ext_dp=1 force_vbus=3 force_id=3 and
 vbus_valid_from_vbus=0 (the PHY's VBUS pin is not wired), and the UDC interrupt count never
 moves -- no bus reset ever arrives. What remains is the cable/hub path or the connector itself.
+PHY registers too (`t2c_usbreg2`): 0x410 PHYCTRL=0x20 (SIDDQ=0 powered, VBUSVLDEXT=1), 0x420
+PHY-select=1 (PHY routed to the OTG controller, not ehci0/ohci0). Mac side: the USB-C port the
+adapter sits on reports power state 2 (VBUS on, CC attached) and never a device; a known-good
+data cable, both plug orientations, direct port, and (as far as tested) FEL (reset held while
+plugging) showed nothing. Conclusion for this unit: D+/D- do not reach the connector -- USB
+device mode is complete in software but unusable here. Left in: it is off by default.
 Also learned: `usb_device`/`usb_host` under `/sys/devices/platform/soc/usbc0/` are *read*
 triggers (their show handlers switch the hardware role; writing `otg_role` calls the same
 functions), and reading them stops the manager's scan thread for good.
