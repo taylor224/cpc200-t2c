@@ -1,5 +1,9 @@
 # Carlinkit T2C — Tesla web UI rebuild
 
+![CarPlay on a Tesla Model Y through the adapter: the Tesla browser at http://carplay.internal/ next to the car's own UI, H.264 at 19 fps](docs/images/tesla-carplay.jpg)
+
+*Wireless CarPlay in a Tesla: the car's browser open on `http://carplay.internal/` (this firmware's page, H.264 video from the iPhone decoded in the browser), the Tesla UI on the left.*
+
 Custom firmware build for the Carlinkit **T2C** (TesPush T2C, hardware branch `1508`) that
 replaces the adapter's Tesla‑browser web interface and the phone‑facing settings page.
 The device binaries are untouched; only `app/www` (Tesla page) and `ota/www` (phone page
