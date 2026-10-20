@@ -1,7 +1,7 @@
 {
-  "appver": "26101721.1508.1",
-  "tsl": "26101721.5.4",
-  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101721.img",
-  "msg": "Picture mode (MJPEG) is back in the Rust UI: the page's \"Picture\" transport works again, through the same hardware transcoder the vendor UI used.",
-  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101721"
+  "appver": "26101723.1508.1",
+  "tsl": "26101723.5.4",
+  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101723.img",
+  "msg": "A USB serial console on the adapter's USB-C port (root shell + firmware upload without Wi-Fi), switchable from both pages and turned on by itself when Wi-Fi will not come up -- verified up to the USB ",
+  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101723"
 }
