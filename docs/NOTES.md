@@ -1030,6 +1030,47 @@ an older phone page does not error). A flash clears both flags, so a freshly fla
 the Rust UI. Verified on the bench 2026-10-19 night: 26101719 flashed over 26101718, no flags, the
 Rust UI came up (see the release notes). Below: the history of the opt-in period.
 
+## No Wi-Fi, no Wi-Fi LED after 26101719..23 on adapters with the default password (fixed in 26101724)
+
+Reported 2026-10-20 by several owners who went 26101718 -> 26101723: the hotspot never appears and
+the Wi-Fi LED stays off. The image was intact (md5 of the released file, kernel unchanged, squashfs
+under the partition), the USB console code is inert at boot, and the vendor library never starts
+hostapd by itself at boot (its only `system("hostapd -B")`, fn 0x1adc in liblylinkui, is reached
+through cmd 12 alone). What broke was the Rust UI becoming the default in 26101719 combined with a
+*settings interpretation* gap: t2cui read lycfg.txt with stock's layout but not with stock's rules.
+
+**Stock never stores the default password.** `save_hostapd_conf` (lylinkui 0x14ef0) skips the
+`wpa_passphrase=` replacement when lycfg +8 starts with 0 (0x15074-0x1508c) and keeps the
+template's `wpa_passphrase=88888888`; `lylinkapi_wifi` gets a `strcpy("88888888")` for the same
+case (0x153d8) -- the only reference to that literal in the binary. So every adapter whose owner
+never changed the password has twelve zero bytes there, and `Cfg::load` copied them over t2cui's
+defaults: `wifi.rs` wrote `wpa_passphrase=` empty, the rootfs hostapd refused the file ("invalid
+WPA passphrase length 0 (expected 8..63)"), `-B` failed synchronously, the wrapper gave up after
+four tries, t2cui logged the return code and moved on, the watchdog relaunched the same file six
+times an hour, and the LED stayed off because t2cui lights it only while hostapd runs. Adapters with
+a custom password (the bench unit) and adapters with no lycfg.txt at all (defaults) were fine, which
+is why nothing showed on the bench. Other rules read from the same function and now mirrored in
+`wifi.rs`: channel byte 0 -> `channel=6` + `hw_mode=g` (0x151f8 writes a literal '6'), 0xff -> 149
+(0x15204), hw_mode `a` above 14 (0x15000), and the template's `ht_capab=` line dropped for channels
+8-14, 48 and >= 162 (0x1502c-0x1505c; `[HT40+]` on 165 has no partner and this hostapd does not fall
+back to 20 MHz, it dies after the scan). The physical key's long press (factory reset, `rm -rf
+/mnt/UDISK/*`) also lives in lylinkui only; t2cui has the page command.
+
+26101724: `Cfg::psk()` applies the default for an empty or short field (conf, lylinkapi_wifi, init
+JSON and QR all go through it; `psk_raw()` shows the stored value), `wifi.rs` renders with the stock
+rules, t2cui checks that the daemon is really up 6 s after `hostapd -B` and retries once with a plain
+20 MHz file, and the watchdog gained an AP of last resort (60 s up, no daemon, the UI cannot fix it:
+`/tmp/hostapd-wd.conf` from the template + lycfg.txt + WIFI_NAME, started through the wrapper's
+pass-through) plus a vendor-UI fallback when t2cui dies twice in the first 15 minutes. Release test
+from now on: zero the password field of lycfg.txt and boot.
+
+**Adapters already on 26101719..23 with no Wi-Fi have no network path back.** The only automatic
+way in is the USB console: the watchdog touches `/tmp/t2c_usb_rescue` at its second hostapd
+relaunch (about 90 s after boot) and t2cd turns the port into a CDC-ACM device -- useful only on
+units whose D+/D- reach the connector (not this bench unit). On such a console:
+`touch /mnt/UDISK/t2c_ui_stock; reboot` (vendor UI, then update from the phone page) or write the
+password into lycfg.txt at offset 8.
+
 ## Rust UI opt-in (`/mnt/UDISK/t2c_ui_rust`, 26101707 .. 26101718)
 
 `app/lyLoadModule.sh` starts `app/t2cui --log /tmp/t2cui.log` instead of `/tmp/lylink/tesla -s`

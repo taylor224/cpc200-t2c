@@ -148,3 +148,8 @@ its `lylink_h264_*` transcoder (V831 decode + JPEG encode) exactly as stock lyli
 page's `/video.jpg` is the same multipart stream (NOTES › Picture mode). The
 vendor UI stays in the image as the fallback until the car test; dropping it (and the patcher)
 frees the squashfs space t2cd+t2cui need.
+26101724: `config.rs` applies stock's runtime defaults to lycfg.txt (an unset password field means
+88888888 -- stock never writes it, and 26101719..23 wrote an empty `wpa_passphrase=` that hostapd
+refused: no AP, no LED on every adapter with the default password), `wifi.rs` mirrors stock's
+channel/ht_capab rules, a start is verified and retried once with a plain 20 MHz file, and the
+watchdog can bring the AP up without t2cui (NOTES › No Wi-Fi, no Wi-Fi LED after 26101719..23).

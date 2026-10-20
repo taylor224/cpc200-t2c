@@ -10,6 +10,16 @@
 #     restarts (channel or password change) finish within seconds and are left alone.
 #   Both relaunches are limited to 6 per hour. /mnt/UDISK/t2c_watchdog_off disables them (the health
 #   log stays on).
+#   * the Rust UI (app/t2cui, default since 26101719) missing on two checks -> relaunch; gone again
+#     after two relaunches inside the first 15 minutes -> the vendor UI (/tmp/lylink/tesla -s) for
+#     the rest of this boot, so a t2cui that cannot start on some adapter does not take the car page
+#     and the hotspot with it.
+#   * AP of last resort: the UI is the one that writes /tmp/hostapd.conf and starts hostapd. When
+#     there is still no daemon 60 s after boot and the UI cannot be the one to fix it (not running,
+#     never wrote the file, or its file failed twice), render the stock-shaped 20 MHz file here from
+#     the rootfs template, lycfg.txt and WIFI_NAME exactly as lylinkui's save_hostapd_conf does
+#     (password unset -> 88888888, channel 0 -> 6, 0xff -> 149) and start it. 26101719..23 had no
+#     such path: an empty password in /tmp/hostapd.conf meant no Wi-Fi, no LED and no way in.
 #   * t2cd (rust/t2cd: the DNS forwarder the car's port-53 traffic is redirected to) missing ->
 #     relaunch at the next check (/tmp/t2cd, an uploaded bench build, wins over the firmware's
 #     app/t2cd); while it is not running the nat REDIRECT rule it maintains is removed so the
@@ -91,6 +101,46 @@ tsf_probe() {
 # evidence of a dead radio, then a clean reboot (unless disabled or looping)
 # no Wi-Fi = no way in: ask t2cd for the USB serial console (CDC-ACM root shell) until the next boot
 usb_rescue() { [ -e /tmp/t2c_usb_rescue ] || { touch /tmp/t2c_usb_rescue; log "wifi down ($1): USB console enabled (/tmp/t2c_usb_rescue, until reboot)"; }; }
+
+# AP of last resort (header): /tmp/hostapd-wd.conf from the template + lycfg.txt + WIFI_NAME, the
+# stock rules (lylinkui save_hostapd_conf 0x14ef0): password field empty/short -> 88888888, channel
+# byte 0 -> 6, 0xff -> 149, hw_mode g up to 14, no ht_capab (20 MHz: nothing left for the driver
+# to refuse). busybox has no od/hexdump and a shell variable cannot hold NUL, so the channel byte is
+# mapped to a letter with tr (octal: the page's 6/36-48/149-165, NUL, 0xff) before it is captured.
+TPL=/etc/wifi/hostapd.conf
+LYCFG=/mnt/UDISK/lycfg.txt
+WDCONF=/tmp/hostapd-wd.conf
+chan_byte() {   # lycfg byte 5 -> channel number the way stock reads it (0 -> 6, 0xff -> 149, unknown -> 149)
+	case "$(dd if="$1" bs=1 skip=5 count=1 2>/dev/null | tr '\000\006\044\050\054\060\225\231\235\241\245\377' 'ZABCDEFGHIJK')" in
+		Z|A) echo 6 ;; B) echo 36 ;; C) echo 40 ;; D) echo 44 ;; E) echo 48 ;; G) echo 153 ;; H) echo 157 ;; I) echo 161 ;; J) echo 165 ;; *) echo 149 ;;
+	esac
+}
+wd_render() {   # $1 = force24: 2.4 GHz channel 6 whatever lycfg says (the second attempt)
+	[ -r "$TPL" ] && [ -n "$WIFI_NAME" ] || return 1
+	ch=6; psk=''
+	if [ -r "$LYCFG" ] && [ "$(wc -c < "$LYCFG" 2>/dev/null)" -ge 548 ]; then
+		ch=$(chan_byte "$LYCFG")
+		psk=$(dd if="$LYCFG" bs=1 skip=8 count=12 2>/dev/null | tr '\000' '\n' | head -n 1)
+	fi
+	[ "$1" = force24 ] && ch=6
+	[ "${#psk}" -ge 8 ] || psk=88888888
+	hw=g; [ "$ch" -gt 14 ] && hw=a
+	{
+		grep -v -e '^ssid=' -e '^channel=' -e '^hw_mode=' -e '^wpa_passphrase=' -e '^ht_capab=' -e '^ieee80211ac=' -e '^vht_' "$TPL"
+		printf 'ssid=%s\nchannel=%s\nhw_mode=%s\nwpa_passphrase=%s\n' "$WIFI_NAME" "$ch" "$hw" "$psk"
+	} > "$WDCONF.tmp" 2>/dev/null && mv "$WDCONF.tmp" "$WDCONF"
+}
+ap_rescue() {   # at most twice per boot (the second on 2.4 GHz); the wrapper passes any file but /tmp/hostapd.conf straight to the daemon
+	[ $ap_n -ge 2 ] && return 0
+	ap_n=$((ap_n + 1))
+	mode=''; [ $ap_n -ge 2 ] && mode=force24
+	if wd_render $mode; then
+		log "no AP at $now s (ui=$(pids tesla)$(pids t2cui) conf=$([ -r "$CONF" ] && echo yes || echo no) ui_relaunches=$hap_n): hostapd with $WDCONF, ch $ch (attempt $ap_n)"
+		PATH="$HERE:$PATH" "$HERE/hostapd" -B "$WDCONF" </dev/null >>"$LOG" 2>&1
+	else
+		log "no AP at $now s and nothing to render one from (template or WIFI_NAME missing)"
+	fi
+}
 radio_dead() {
 	reason=$1
 	cnt=$(cat "$CRASHCOUNT" 2>/dev/null); case "$cnt" in ''|*[!0-9]*) cnt=0 ;; esac
@@ -154,7 +204,7 @@ health() {
 	fi
 }
 
-goc_miss=0; hap_miss=0; goc_n=0; goc_win=0; hap_n=0; hap_win=0; tick=0; lines=0; dns_miss=0; dns_n=0; dns_win=0; ui_miss=0; ui_n=0; ui_win=0
+goc_miss=0; hap_miss=0; goc_n=0; goc_win=0; hap_n=0; hap_win=0; tick=0; lines=0; dns_miss=0; dns_n=0; dns_win=0; ui_miss=0; ui_n=0; ui_win=0; ui_fallback=''; ap_miss=0; ap_n=0
 crash_reset=0
 log "start bt_name=$BT_NAME dir=$HERE"
 echo 20 > /proc/sys/kernel/panic 2>/dev/null
@@ -177,12 +227,17 @@ while :; do
 			fi
 		fi
 		# the Rust UI has no parent process to respawn it (stock tesla does): two misses -> relaunch
-		if [ ! -e "$STOCKUI" ] && [ -x "$HERE/t2cui" ]; then
+		if [ ! -e "$STOCKUI" ] && [ -x "$HERE/t2cui" ] && [ -z "$ui_fallback" ]; then
 			if t2cui_alive; then ui_miss=0; else
 				ui_miss=$((ui_miss + 1))
 				if [ $ui_miss -ge 2 ]; then
 					[ $((now - ui_win)) -ge 3600 ] && { ui_win=$now; ui_n=0; }
-					if [ $ui_n -lt $MAX_PER_HOUR ]; then
+					if [ $ui_n -ge 2 ] && [ "$now" -lt 900 ] && [ -x /tmp/lylink/tesla ]; then
+						# gone again after two relaunches early in the boot: the vendor UI for this boot
+						ui_fallback=1; ui_miss=0
+						log "t2cui gone again after $ui_n relaunches at $now s: vendor UI (tesla -s) for the rest of this boot"
+						( /tmp/lylink/tesla -s </dev/null >/dev/null 2>&1 & )
+					elif [ $ui_n -lt $MAX_PER_HOUR ]; then
 						ui_n=$((ui_n + 1)); ui_miss=0
 						log "t2cui missing for $((2 * PERIOD)) s, relaunch ($ui_n this hour)"
 						( "$HERE/t2cui" --log /tmp/t2cui.log </dev/null >/dev/null 2>&1 & )
@@ -203,6 +258,14 @@ while :; do
 					usb_rescue "hostapd gave up"
 				fi
 			fi
+		fi
+		# AP of last resort (header): two checks (30 s) with no daemon once 60 s up, and the UI path
+		# cannot be the one to fix it; its own relaunch above resets hap_miss when the daemon is back
+		if [ "$now" -ge 60 ] && ! hostapd_alive && { ! lylinkui_alive || [ ! -r "$CONF" ] || [ $hap_n -ge 2 ]; }; then
+			ap_miss=$((ap_miss + 1))
+			if [ $ap_miss -ge 2 ]; then ap_miss=0; ap_rescue; fi
+		else
+			ap_miss=0
 		fi
 	fi
 	bin=$(t2cd_bin)

@@ -313,32 +313,59 @@ impl Session {
     /// /tmp/hostapd.conf from the template, hostapd started if missing (or restarted when
     /// `restart`), the credentials to the vendor library (lylinkapp -> iAP -> iPhone).
     pub fn wifi_handoff(&self, restart: bool) {
-        let (channel, psk) = {
+        let (channel, psk, psk_unset) = {
             let cfg = self.cfg.lock().unwrap_or_else(|e| e.into_inner());
-            (cfg.channel(), cfg.psk())
+            (cfg.channel(), cfg.psk(), cfg.psk_raw().len() < 8)
         };
         let ssid = self.info.ssid.clone();
         if ssid.is_empty() {
             self.log.log("wifi: no ssid (WIFI_NAME unset and no /tmp/hostapd.conf): hostapd left alone");
             return;
         }
+        if psk_unset {
+            self.note("wifi: password field unset in lycfg.txt, the stock default applies".to_string());
+        }
         match crate::wifi::write_conf(&ssid, channel, &psk) {
             None => self.log.dbg("wifi: no hostapd template here"),
             Some(changed) => {
                 let running = crate::wifi::running();
-                self.note(format!("wifi: conf {} ch {} hostapd {}", if changed { "written" } else { "unchanged" }, channel, if running { "running" } else { "not running" }));
+                self.note(format!("wifi: conf {} ch {} (lycfg {}) hostapd {}", if changed { "written" } else { "unchanged" }, crate::wifi::stock_channel(channel), channel, if running { "running" } else { "not running" }));
                 if restart && running {
                     // stock KEY_CHANNEL: save_hostapd_conf + lylinkapi_cmd(12) -> the library's own
                     // hostapd relaunch (killall + `hostapd -B`, through the wrapper on PATH)
                     self.note("wifi: hostapd restart through the library (cmd 12)".to_string());
                     self.backend.raw_cmd(12);
                 } else if !running {
-                    let rc = crate::wifi::start();
-                    self.note(format!("wifi: hostapd started -> {}", rc));
+                    self.start_hostapd(&ssid, channel, &psk);
                 }
             }
         }
         self.backend.wifi(&ssid, &psk);
+    }
+
+    /// `hostapd -B` through the wrapper, then a check: the daemon can refuse the file (`-B` returns
+    /// non-zero) or die after its 40 MHz scan (channel 165 with `[HT40+]`, 26101719..23 wrote
+    /// that), and nothing used to notice. One retry with the plain 20 MHz file; after that the
+    /// watchdog's AP of last resort takes over. An AP the car can see beats a perfect one nobody
+    /// can reach.
+    fn start_hostapd(&self, ssid: &str, channel: u8, psk: &str) {
+        let rc = crate::wifi::start();
+        self.note(format!("wifi: hostapd started -> {}", rc));
+        let (log, ssid, psk) = (self.log.clone(), ssid.to_string(), psk.to_string());
+        let _ = std::thread::Builder::new().name("wifi-check".into()).spawn(move || {
+            if rc == 0 && crate::wifi::wait_running(6) {
+                return;
+            }
+            log.log(&format!("wifi: hostapd not running after start (rc {}): retrying with the plain 20 MHz file", rc));
+            match crate::wifi::write_conf_opts(&ssid, channel, &psk, true) {
+                None => log.log("wifi: no hostapd template here"),
+                Some(_) => {
+                    let rc2 = crate::wifi::start();
+                    let ok = rc2 == 0 && crate::wifi::wait_running(6);
+                    log.log(&format!("wifi: plain-file start -> {} ({})", rc2, if ok { "running" } else { "still not running; the watchdog takes over" }));
+                }
+            }
+        });
     }
 
     // ------------------------------------------------------------------ clients

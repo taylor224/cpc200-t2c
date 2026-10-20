@@ -9,6 +9,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub const SIZE: usize = 556;
+/// The password stock applies when the field is unset (it never writes it to the file).
+pub const DEFAULT_PSK: &str = "88888888";
 
 #[derive(Clone)]
 pub struct Cfg {
@@ -34,7 +36,7 @@ impl Cfg {
         raw[4] = 0x3c;
         raw[5] = 149; // channel
         raw[6] = 0xff; // language: auto
-        raw[8..8 + 8].copy_from_slice(b"88888888");
+        raw[8..8 + DEFAULT_PSK.len()].copy_from_slice(DEFAULT_PSK.as_bytes());
         raw[20..24].copy_from_slice(b"Auto");
         raw[550] = 1; // mode: H.264 video
         raw[552] = 1; // auto-connect
@@ -110,7 +112,23 @@ impl Cfg {
     pub fn set_fps(&mut self, v: u8) {
         self.raw[548] = v;
     }
+    /// The hotspot password as stock lylinkui *applies* it, not as the file stores it. The 12-byte
+    /// field is all zeros on every adapter whose owner never changed the password: stock never
+    /// writes "88888888" anywhere (save_hostapd_conf 0x15074 skips the wpa_passphrase line when the
+    /// first byte is 0 and keeps the template's `wpa_passphrase=88888888`; lylinkapi_wifi gets a
+    /// strcpy of the same literal at 0x153d8, the only reference to it in the binary). An empty or
+    /// short field therefore means the default. hostapd rejects anything under 8 bytes outright,
+    /// which is what left 26101719..23 adapters without an AP (NOTES).
     pub fn psk(&self) -> String {
+        let s = field_str(&self.raw[8..20]);
+        if s.len() < 8 {
+            DEFAULT_PSK.to_string()
+        } else {
+            s
+        }
+    }
+    /// The field as stored (empty when unset): diagnostics only.
+    pub fn psk_raw(&self) -> String {
         field_str(&self.raw[8..20])
     }
     /// At most 11 characters, always NUL-terminated (the stock bug let 12 run into the name).
@@ -171,5 +189,21 @@ mod tests {
         c.set_name(b"My Tesla Car!!!");
         assert_eq!(c.name(), "My Tesla Car");
         assert_eq!(c.channel(), 149);
+    }
+
+    /// A file written by stock with the password never set: zeros in the field, the default applies.
+    #[test]
+    fn psk_default_when_unset_or_short() {
+        let mut c = Cfg::defaults(Path::new("/tmp/x"));
+        c.raw[8..20].fill(0);
+        assert_eq!(c.psk_raw(), "");
+        assert_eq!(c.psk(), DEFAULT_PSK);
+        c.set_psk("short7!");
+        assert_eq!(c.psk(), DEFAULT_PSK);
+        c.set_psk("chadole0224");
+        assert_eq!(c.psk(), "chadole0224");
+        // stale bytes after a shorter password's terminator do not leak in (stock reads a C string)
+        c.raw[8..20].copy_from_slice(b"abcdefgh\0xyz");
+        assert_eq!(c.psk(), "abcdefgh");
     }
 }
