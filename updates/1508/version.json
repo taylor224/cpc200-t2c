@@ -1,7 +1,7 @@
 {
-  "appver": "26101723.1508.1",
-  "tsl": "26101723.5.4",
-  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101723.img",
-  "msg": "A USB serial console on the adapter's USB-C port (root shell + firmware upload without Wi-Fi), switchable from both pages and turned on by itself when Wi-Fi will not come up -- verified up to the USB ",
-  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101723"
+  "appver": "26101724.1508.1",
+  "tsl": "26101724.5.4",
+  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101724.img",
+  "msg": "Fixes the adapter coming up without Wi-Fi (no AutoKit network, Wi-Fi LED dark) after 26101719..26101723 on every adapter whose Wi-Fi password was never changed; both update paths verified on a unit (2",
+  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101724"
 }
