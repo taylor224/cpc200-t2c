@@ -55,6 +55,46 @@ curl -F 'file=@T2C-tesla-ui-YYMMDDNN.img;filename=update.img' \
 Only for firmware branch **1508** (`http://192.168.3.1/cgi-bin/index.cgi?id=host` shows a
 version like `2609….1508.x`). There is no A/B fallback; keep the adapter powered.
 
+## Recovery (the adapter no longer shows its Wi‑Fi)
+
+When the adapter's hotspot never appears (no `AutoKit_xxxx` network, the Wi‑Fi LED stays
+dark) nothing in this firmware can reach it any more: the settings page, the car page and the
+updater all sit behind that hotspot. (26101719–26101723 did this to every adapter whose Wi‑Fi
+password had never been changed; fixed in 26101724, see `docs/NOTES.md`.) The way back is
+Allwinner's USB flashing tool **PhoenixSuit** with Carlinkit's factory image, the procedure
+Carlinkit documents at <https://www.carlinkit.com/faq_detail/145.html> (video:
+<https://youtu.be/zcg8meuj6YQ>). The files are mirrored in this repository's
+[**recovery-tools** release](https://github.com/taylor224/cpc200-t2c/releases/tag/recovery-tools)
+so they stay available if that page goes away:
+
+| File | What it is | SHA‑256 |
+|---|---|---|
+| [PhoenixSuit_CN.zip](https://github.com/taylor224/cpc200-t2c/releases/download/recovery-tools/PhoenixSuit_CN.zip) | PhoenixSuit installer (`PhoenixSuit_CN.msi`, Windows only, Chinese UI — the two items you need are *Firmware* and *Image*) | `b858cbc7aa11153746839a9b6622f0c094ca941099140c403f87da3a8d66966b` |
+| [1508-20231209.zip](https://github.com/taylor224/cpc200-t2c/releases/download/recovery-tools/1508-20231209.zip) | factory image for hardware branch **1508** — `1508_20231209.img` is the whole flash (vendor firmware `23120914.1508.1`), plus that version's OTA file `update.img` and the vendor release notes | `122deaebfa91625a67b655e5a1df2b9a1173174d938c84c240238dad35f63721` |
+| [1552-20231212.zip](https://github.com/taylor224/cpc200-t2c/releases/download/recovery-tools/1552-20231212.zip) | the same for branch **1552**, Carlinkit's other T2C hardware version. This project does not run on it; kept only so both of Carlinkit's files survive | `5dd1adf9f1196a68b4998f0b9eacd785437c56c6ffacbfd0378437d3a71e47a6` |
+
+You need a Windows PC, a USB‑C **data** cable and a SIM‑eject pin or a paper clip.
+
+1. Install PhoenixSuit from the archive and start it.
+2. *Firmware* → *Image* → pick `1508_20231209.img` from the 1508 archive. A T2C that ran this
+   firmware is a 1508 unit (`index.cgi?id=host` showed `….1508.x`); the 1552 image belongs to
+   the other hardware version — do not flash it on a 1508 unit.
+3. Find the reset hole on the side of the adapter that carries the product label. Push the pin
+   in until it clicks, keep it pressed, and while holding it plug the adapter into the PC with
+   the data cable.
+4. PhoenixSuit asks whether to format the device: answer *Yes*. The pin can be released now.
+5. Click *Firmware* to start. The write takes about six minutes; it sits at 7 % for a long time
+   and the adapter's LEDs stay dark while it runs — normal, do not unplug.
+6. When PhoenixSuit reports completion the LEDs come back and the adapter boots the factory
+   firmware. Everything on it is gone: phone pairings, the Wi‑Fi password (back to `88888888`),
+   channel, car name. Pair the phone again, then install this firmware as in *First installation*
+   above — the factory `23120914.1508.1` accepts the image the same way.
+
+If PhoenixSuit never shows the connection prompt, try another cable and USB port first. On the
+development unit the PC saw nothing in this mode either (the USB data lines did not seem to reach
+the connector, NOTES › USB device mode); such a unit can only be recovered with an SPI programmer
+on the flash chip.
+
 ## Why
 
 Tesla software 2026.26 moved the in‑car browser to Chromium 148 and changed its pixel
