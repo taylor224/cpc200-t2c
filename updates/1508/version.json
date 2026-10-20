@@ -1,7 +1,7 @@
 {
-  "appver": "26101724.1508.1",
-  "tsl": "26101724.5.4",
-  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101724.img",
-  "msg": "Fixes the adapter coming up without Wi-Fi (no AutoKit network, Wi-Fi LED dark) after 26101719..26101723 on every adapter whose Wi-Fi password was never changed; both update paths verified on a unit (2",
-  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101724"
+  "appver": "26101725.1508.1",
+  "tsl": "26101725.5.4",
+  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101725.img",
+  "msg": "Fixes the black car screen after opening the Carlinkit app inside CarPlay and pressing \"Open CarPlay\": the picture used to come back only after a swipe. Verified on a unit (26101724 -> this).",
+  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101725"
 }
