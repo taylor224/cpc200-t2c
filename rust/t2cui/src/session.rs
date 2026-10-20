@@ -591,7 +591,13 @@ impl Session {
         }
         // an IDR: build the "with headers" variant once if the unit has no SPS of its own
         let has_sps = p::nal_types(unit).any(|t| t == 7);
-        let codec = self.st.lock().unwrap_or_else(|e| e.into_inner()).codec.clone();
+        let codec = {
+            let mut st = self.st.lock().unwrap_or_else(|e| e.into_inner());
+            // this IDR serves every page that was waiting: a request queued behind the rate limit
+            // (a page asking twice while it (re)starts) would only restart the encoder once more
+            st.keyreq_pending = false;
+            st.codec.clone()
+        };
         let with_headers: Option<Vec<u8>> = match (has_sps, codec) {
             (false, Some(cc)) => {
                 let mut v = Vec::with_capacity(cc.len() + unit.len());
@@ -806,8 +812,15 @@ impl Session {
                         self.set_link(2);
                     }
                 }
-                // the page follows up with CMD_KEYFRAME itself; the fan-out asks again if P-frames
-                // keep arriving (each request restarts the phone's encoder: VIDEO_START + IDR)
+                // The page's decoder starts from nothing and the fan-out holds P-frames back until
+                // an IDR: ask the phone for one now (each request restarts its encoder: VIDEO_START
+                // + IDR). Leaving it to the fan-out -- which asks on the next P-frame -- left the car
+                // screen black after the page menu whenever CarPlay showed a still picture: the
+                // phone sends nothing until something moves, so nothing ever asked, until the user
+                // swiped. Rate-limited; the page's own CMD_KEYFRAME folds into this one.
+                if streaming {
+                    self.request_keyframe(false);
+                }
             }
             p::CMD_AUTO_ON | p::CMD_AUTO_OFF => {
                 let mut cfg = self.cfg.lock().unwrap_or_else(|e| e.into_inner());

@@ -329,6 +329,11 @@
       if (newLink > 1) {
         link.cmd(CMD.VIDEO);
         startVideo();
+        // The decoder was just cleared and the adapter holds P-frames back until an IDR; on a
+        // still CarPlay screen the phone sends nothing, so nobody would ask for one: back from
+        // the page menu the car screen stayed black until the user swiped. (t2cui asks the
+        // phone as well; the two requests fold into one.)
+        if (state.vid) requestKeyframe();
       } else {
         if (prev > 1) { stopVideo(); showPage('home'); }
         if (newLink === 0) presenter.clear();

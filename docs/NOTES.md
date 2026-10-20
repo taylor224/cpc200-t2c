@@ -1071,6 +1071,27 @@ units whose D+/D- reach the connector (not this bench unit). On such a console:
 `touch /mnt/UDISK/t2c_ui_stock; reboot` (vendor UI, then update from the phone page) or write the
 password into lycfg.txt at offset 8.
 
+## Black car screen after the Carlinkit menu until a swipe (fixed in 26101725)
+
+Reported 2026-10-20: open the Carlinkit app inside CarPlay (link 2 -> 1, the page shows its menu),
+press "Open CarPlay", and the car screen stays black; the first swipe brings the picture back.
+Cause: a key-frame request that nobody sent. On `CMD_VIDEO` t2cui marks the page `need_idr`,
+asks the phone to draw again (cmd 4) and reports link 2; the fan-out then withholds P-frames
+until an IDR and asks the phone for one **when the next P-frame arrives** (`deliver()`). The
+page clears its decoder on the link change (`startH264` -> worker `clear`, `waitKey`) and asks
+for a key frame only on worker `ready`, on `needkey` (a P-frame it cannot decode -- which the
+adapter never sends it) and on `visibilitychange`. With CarPlay showing a still picture the
+phone sends nothing at all, so neither side ever asked: no frames, black canvas. A swipe
+changes the picture, P-frames flow, the fan-out asks, the IDR arrives (SPS/PPS glued in front),
+the page decodes. Picture mode was never affected (`ensure_picture()` forces a request when the
+transcoder restarts), and a moving map recovered on its own within the 2 s key-request gap.
+Fix: t2cui asks the phone on `CMD_VIDEO` whenever a stream is running (`session.rs` `on_cmd`),
+the page asks on every video (re)start in `switchVideo` (same as its visible path), and an IDR
+on the fan-out clears a request queued behind the rate limit so the page's double ask (button
+`CMD_VIDEO`, then the link-2 `CMD_VIDEO` + `CMD_KEYFRAME`) restarts the phone's encoder once,
+not twice. The adapter log shows it: `page #N wants video (link 1)` is now followed by
+`key frame requested` without waiting for a touch.
+
 ## Rust UI opt-in (`/mnt/UDISK/t2c_ui_rust`, 26101707 .. 26101718)
 
 `app/lyLoadModule.sh` starts `app/t2cui --log /tmp/t2cui.log` instead of `/tmp/lylink/tesla -s`
