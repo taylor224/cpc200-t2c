@@ -1092,6 +1092,38 @@ on the fan-out clears a request queued behind the rate limit so the page's doubl
 not twice. The adapter log shows it: `page #N wants video (link 1)` is now followed by
 `key frame requested` without waiting for a touch.
 
+## Forget on the Devices page did nothing (GitHub issue #1, fixed in 26101726)
+
+Reported 2026-10-20 on 26101725: a phone removed on the iPhone side stays in the car page's list
+and the page's delete button does nothing, so re-pairing fails a few times until the stale bond
+gives way. The list is gocsdk's `bt_conf.ini` (addrN/nameN, `pairlistindex`, `lastaddr`) and
+only gocsdk edits it, so the adapter cannot know the iPhone forgot it; the button is the way out,
+and it was broken. Read on 2026-10-21 (`llvm-objdump --triple=armv7-linux-gnueabihf`, PIC
+string refs resolved as `ldr rX,[pc]` + `add rX,pc,rX`):
+
+- **gocsdk** keeps a table of AT handlers (`at_funcs`, .data 0x92ad8, 118 entries). Entry 36 at
+  0x16f40 is the one that calls `gap_debond_req` + `delete_pairlist_by_addr`: with an empty
+  argument it debonds every entry (`read_pair_list_count` / `read_pair_list_by_index`), with a
+  one-character argument it takes `atoi(arg) - 1` as the index (so **1-based**, a negative one
+  is an error), otherwise `str_to_addr` (libGbtsTask: `strlen == 12` plain hex) and debonds that
+  address; with no parseable address it falls back to the connected phone.
+- **stock lylinkui** (0x184c0) answers the page's type-6 "forget" by looking the address up in
+  the `MX<index:1><addr:12><name>` lines it got from `AT#MX` and sends `AT#CV` + that index
+  character (`AT#CC`/`AT#CD`/`AT#CV` are the sibling connect/disconnect/forget commands).
+- **t2cui 26101709..25** sent `AT#CV` + the phone's 0-based position in `bt_conf.ini`:
+  `AT#CV0` for the first phone is the index error, `AT#CV1` would have removed the first phone
+  whichever was asked. Fixed: `AT#CV<addr>`. gocsdk answers `PR<status><addr>` (seen on the
+  bench with an unpaired address: `PR2001122334455` + `OK`, nothing deleted), rewrites
+  `bt_conf.ini`, and t2cui sends the pages the list again on that line (and 2.5 s after the
+  request regardless).
+- **Second defect, same page:** the status JSON's `bt` carried the phone's *name* (`SA` line);
+  stock carries the connected phone's *address*, which the page matches against its list for the
+  "Connected" tag and for Connect/Disconnect/Forget of a connected phone (forget disconnects
+  first, then forgets when `bt` goes empty). With a name there nothing matched: no phone was ever
+  "Connected", Connect sent `AT#CD<name>` (dropped) and the forget-while-connected path never
+  ran. Now `bt` = the address from the phone's `SV`/`SS` service lines (`SV<addr:12><uuid>`),
+  `bt_conf.ini`'s `lastaddr` until one came, empty without a phone.
+
 ## Rust UI opt-in (`/mnt/UDISK/t2c_ui_rust`, 26101707 .. 26101718)
 
 `app/lyLoadModule.sh` starts `app/t2cui --log /tmp/t2cui.log` instead of `/tmp/lylink/tesla -s`

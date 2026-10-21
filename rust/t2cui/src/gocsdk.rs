@@ -13,6 +13,10 @@
 //!   <- IA               -> AT#MM (stock's reply); IB / MM / MF / PO / JH / ER / IV / NS / NA / SA
 //!                       other reports (counted, logged once in a while)
 //!   -> AT#CD<mac> / AT#CC<mac>   disconnect / connect a phone (page buttons; forwarded as-is)
+//!   -> AT#CV<mac>       forget a phone (gocsdk debonds it and rewrites bt_conf.ini; also takes
+//!                       "" = every phone, or one digit = the 1-based index of its MX report, which
+//!                       is what stock sends); answered with PR<status><mac>
+//!   <- SV / SS          service lines of the connected phone, SV<addr:12><uuid> (its address)
 //!
 //! Only this process may read the pty (stock lylinkui is not running when t2cui is the UI).
 //! lylinkapp keeps its own TCP channel to gocsdk for iAP, untouched.
@@ -76,6 +80,13 @@ pub struct Gocsdk {
     last_p1: Mutex<Option<Instant>>,
     pub bt_on: AtomicBool,
     pub phone_name: Mutex<String>,
+    /// address of the phone on Bluetooth (12 hex, from its SV/SS service lines; bt_conf.ini's
+    /// lastaddr until one came): the status JSON's `bt`, which the car page matches against its
+    /// paired list (stock sends the address there; a name never matched, so no phone was ever
+    /// "Connected" on the page and Connect/Forget of a connected phone went astray -- issue #1)
+    pub phone_mac: Mutex<String>,
+    /// gocsdk answered a pair-list delete (PR line): the pages get the list again
+    pub list_changed: AtomicBool,
 }
 
 impl Gocsdk {
@@ -99,6 +110,8 @@ impl Gocsdk {
             last_p1: Mutex::new(None),
             bt_on: AtomicBool::new(false),
             phone_name: Mutex::new(String::new()),
+            phone_mac: Mutex::new(String::new()),
+            list_changed: AtomicBool::new(false),
         });
         let reader = g.clone();
         std::thread::Builder::new().name("gocsdk".into()).spawn(move || reader.run()).ok()?;
@@ -212,6 +225,7 @@ impl Gocsdk {
                 _ => {
                     self.log.dbg(&format!("gocsdk: {}", line));
                     self.bt_connected.store(false, Ordering::Relaxed);
+                    self.phone_mac.lock().unwrap_or_else(|e| e.into_inner()).clear();
                 }
             },
             "SA" => {
@@ -222,16 +236,40 @@ impl Gocsdk {
                 self.log.dbg(&format!("gocsdk: {}", line));
             }
             "CN" => {
-                // a phone connected (seen on every connect, before the UUID/service lines)
+                // a phone connected (seen on every connect, before the UUID/service lines); its
+                // argument is not the address -- bt_conf.ini's lastaddr serves until SV/SS name it
                 if !self.bt_connected.swap(true, Ordering::Relaxed) {
                     self.log.log(&format!("gocsdk: phone connected ({})", line));
                 }
+                let mut m = self.phone_mac.lock().unwrap_or_else(|e| e.into_inner());
+                if m.len() != 12 {
+                    *m = crate::status::bt_conf().last;
+                }
+            }
+            "SV" | "SS" => {
+                // service lines: SV<addr:12><uuid...> for the phone that connected (`get`, not
+                // slicing: a multibyte character there would panic, and panic = abort)
+                if let Some(addr) = arg.get(..12).filter(|h| h.chars().all(|c| c.is_ascii_hexdigit())) {
+                    let addr = addr.to_uppercase();
+                    let mut m = self.phone_mac.lock().unwrap_or_else(|e| e.into_inner());
+                    if *m != addr {
+                        self.log.log(&format!("gocsdk: phone address {} ({})", addr, code));
+                        *m = addr;
+                    }
+                }
+                self.log.dbg(&format!("gocsdk: {}", line));
+            }
+            "PR" => {
+                // reply to AT#CV (pair-list delete): PR<status><addr>, bt_conf.ini rewritten by now
+                self.log.log(&format!("gocsdk: {}", line));
+                self.list_changed.store(true, Ordering::Relaxed);
             }
             "DR" => {
                 if self.bt_connected.swap(false, Ordering::Relaxed) {
                     self.log.log(&format!("gocsdk: phone disconnected ({})", line));
                 }
                 self.pan_up.store(false, Ordering::Relaxed);
+                self.phone_mac.lock().unwrap_or_else(|e| e.into_inner()).clear();
             }
             "NC" => {
                 self.log.log(&format!("gocsdk: PAN up ({}), running udhcpc on bt-pan", line));

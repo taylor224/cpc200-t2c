@@ -138,6 +138,8 @@ pub struct State {
     pub last_hello: Option<Hello>,
     pub last_keyreq: Option<Instant>,
     pub keyreq_pending: bool,
+    /// send the paired list again at this time (a forget was asked; gocsdk rewrites the file)
+    pub btlist_at: Option<Instant>,
     pub last_restart: Option<Instant>,
     pub restart_pending: Option<&'static str>,
     pub running: Option<SessionParams>,
@@ -191,6 +193,7 @@ impl Session {
                 last_hello: None,
                 last_keyreq: None,
                 keyreq_pending: false,
+                btlist_at: None,
                 last_restart: None,
                 restart_pending: None,
                 running: None,
@@ -751,6 +754,8 @@ impl Session {
             ClientMsg::BtForget(mac) => {
                 self.bt_op("forget", &mac);
                 self.broadcast(p::S_BTLIST, b"");
+                // gocsdk answers with a PR line (tick sends the list then); this is the fallback
+                self.st.lock().unwrap_or_else(|e| e.into_inner()).btlist_at = Some(Instant::now() + Duration::from_millis(2500));
             }
             ClientMsg::WifiPsk(psk) => {
                 {
@@ -768,7 +773,7 @@ impl Session {
     }
 
     /// Page Bluetooth buttons. Stock lylinkui sends gocsdk `AT#CC<mac>` / `AT#CD<mac>` (connect /
-    /// disconnect); "forget" has no verified command yet and is only logged.
+    /// disconnect) and `AT#CV<n>` (forget, n = the 1-based index of gocsdk's MX report).
     fn bt_op(&self, op: &str, mac: &str) {
         let mac: String = mac.chars().filter(|c| c.is_ascii_hexdigit()).collect::<String>().to_uppercase();
         self.note(format!("bt {} {}", op, mac));
@@ -781,14 +786,12 @@ impl Session {
                 g.send(&format!("AT#CD{}", mac));
             }
             (Some(g), "forget") if mac.len() == 12 => {
-                // stock sends AT#CV<n> with the phone's index in gocsdk's list (bt_conf.ini addrN)
-                let conf = crate::status::bt_conf();
-                match conf.devices.iter().position(|(a, _)| *a == mac) {
-                    Some(n) => {
-                        g.send(&format!("AT#CV{}", n));
-                    }
-                    None => self.log.log(&format!("bt forget: {} not in bt_conf.ini", mac)),
-                }
+                // gocsdk's delete handler (at_funcs[36], read 2026-10-21) takes "" (every phone),
+                // one digit (the 1-based index of its MX report) or a 12-hex address. Stock sends
+                // the MX digit; 26101709..25 sent bt_conf.ini's 0-based position, so "AT#CV0" was
+                // an index error and nothing was ever forgotten (issue #1). The address is
+                // unambiguous. gocsdk debonds, rewrites bt_conf.ini and answers PR<status><addr>.
+                g.send(&format!("AT#CV{}", mac));
             }
             _ => self.backend.bt(op, &mac),
         }
@@ -963,25 +966,39 @@ impl Session {
 
     pub fn status_json(&self, pong: u32) -> String {
         let (sys, exe) = crate::status::cpu_and_uptime();
-        let bt = self.st.lock().unwrap_or_else(|e| e.into_inner()).phone_name.clone();
+        // `bt` = the address of the phone on Bluetooth, empty without one (stock; the car page
+        // matches it against its paired list for "Connected" and the Connect/Forget buttons)
+        let bt = self.gocsdk.lock().unwrap_or_else(|e| e.into_inner()).as_ref()
+            .filter(|g| g.bt_connected.load(Ordering::Relaxed))
+            .map(|g| g.phone_mac.lock().unwrap_or_else(|e| e.into_inner()).clone())
+            .unwrap_or_default();
         format!("{{\"sys\": {}, \"exe\": {}, \"apn\": \"\", \"sig\": 0, \"csq\": 0, \"bt\": {}, \"pong\": {}}}", sys, exe, p::js(&bt), pong)
     }
 
     /// Once a second: status (and the pong) to the newest page only, like stock; deferred key-frame
     /// requests and restarts; dead clients dropped.
     pub fn tick(&self) {
-        let (current, pending_key, pending_restart) = {
+        let (current, pending_key, pending_restart, btlist_due) = {
             let mut st = self.st.lock().unwrap_or_else(|e| e.into_inner());
             st.clients.retain(|c| c.alive.load(Ordering::Relaxed));
             let cur = st.current.and_then(|id| st.clients.iter().find(|c| c.id == id).cloned());
             let pk = st.keyreq_pending && st.last_keyreq.map(|t| t.elapsed() >= KEYREQ_GAP).unwrap_or(true);
+            let bl = st.btlist_at.map(|t| Instant::now() >= t).unwrap_or(false);
+            if bl {
+                st.btlist_at = None;
+            }
             let pr = match (st.restart_pending, st.last_restart) {
                 (Some(r), Some(t)) if t.elapsed() >= RESTART_GAP => Some(r),
                 (Some(r), None) => Some(r),
                 _ => None,
             };
-            (cur, pk, pr)
+            (cur, pk, pr, bl)
         };
+        // a forget was answered (PR line) or asked 2.5 s ago: the paired list has changed
+        let pr = self.gocsdk.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|g| g.list_changed.swap(false, Ordering::Relaxed)).unwrap_or(false);
+        if pr || btlist_due {
+            self.broadcast(p::S_BTLIST, b"");
+        }
         if let Some(c) = current {
             let pong = c.pong.load(Ordering::Relaxed);
             let j = self.status_json(pong);
