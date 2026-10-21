@@ -1,7 +1,7 @@
 {
-  "appver": "26101725.1508.1",
-  "tsl": "26101725.5.4",
-  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101725.img",
-  "msg": "Fixes the black car screen after opening the Carlinkit app inside CarPlay and pressing \"Open CarPlay\": the picture used to come back only after a swipe. Verified on a unit (26101724 -> this).",
-  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101725"
+  "appver": "26101726.1508.1",
+  "tsl": "26101726.5.4",
+  "url": "https://raw.githubusercontent.com/taylor224/cpc200-t2c/releases/1508/T2C-tesla-ui-26101726.img",
+  "msg": "Fixes the Forget (delete) button on the car page's Devices list, which did nothing since the Rust UI (issue #1), and the missing \"Connected\" tag on the phone in use.",
+  "release": "https://github.com/taylor224/cpc200-t2c/releases/tag/v26101726"
 }
