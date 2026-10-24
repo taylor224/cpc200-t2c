@@ -221,7 +221,7 @@ save_ui_log() {
 	if [ -n "$1" ]; then
 		{
 			echo "--- logcat (CarPlay session) at up=$(cut -d' ' -f1 /proc/uptime 2>/dev/null)"
-			logcat -d -v threadtime 2>/dev/null | grep -E 'Teardown|TimeoutErr|NotFoundErr|Sender idle|Idle timeout|NetworkChange|Removing CarPlayController|CPClientConnect|CPClientDisconnect|add_device|del_device|OnNotifyWifi|AP-STA|disassoc|deauth' | grep -v 'psk:' | tail -n 40 | cut -c 1-200
+			logcat -d -v threadtime 2>/dev/null | grep -E 'Teardown|TimeoutErr|NotFoundErr|Sender idle|Idle timeout|NetworkChange|Removing CarPlayController|CPClientConnect|CPClientDisconnect|add_device|del_device|OnNotifyWifi|AP-STA|disassoc|deauth' | grep -vE 'psk:|rta_type\[|ifi_[a-z]+\[|NETLINK_ADD_MEMBERSHIP' | tail -n 40 | cut -c 1-200
 			echo "--- t2cd (last 30: upstream state, SERVFAILs)"; tail -n 30 /tmp/t2cd.log 2>/dev/null || :
 		} > "$DROPTAIL.tmp" 2>/dev/null && mv "$DROPTAIL.tmp" "$DROPTAIL"
 	fi

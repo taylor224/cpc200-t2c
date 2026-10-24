@@ -1224,7 +1224,13 @@ followed from it:
   more line followed the drop (`ip_forward=1`, a page reconnecting) the plain save replaced the copy
   without the logcat section (saved file = log + header + health to the byte). Since 26101731 the
   logcat/t2cd section is written to `/tmp/t2c_drop_tail` at a drop and appended to every later save
-  until the next drop replaces it.
+  until the next drop replaces it. The first real capture (26101732's first boot: the phone left
+  84 s after the reboot) showed `_NetworkChangeListenerHandleNewLink` printing ~30 `rta_type[…]` /
+  `ifi_…[…]` lines per link event, which would push the teardown lines out of the 40-line window;
+  those attribute lines are dropped (the `netlink name[bt-pan]` and `Change:` lines stay). That
+  capture also read: gocsdk `NA` (a code t2cui does not know) at the same instant the `bt-pan`
+  link went down, 4.6 s before the phone left Wi‑Fi — `NA` is probably "PAN down", the counterpart
+  of `NC`; worth handling (re-run udhcpc / wait for the next `NC`) once seen again.
   **An OTA update clears these copies**: `/mnt/UDISK/t2c_health.log` restarted from `up=632` after
   both the 26101728 and the 26101729 update, and `t2c_ui_saved.log.prev` was absent after 26101729,
   while `lycfg.txt` and the Bluetooth pairing survive. So `t2cui_prev` is evidence across a power cut
