@@ -4,8 +4,11 @@
 #   tools/release.sh YYMMDDNN [NOTES.md] [BASE_IMG]
 #
 # Steps: T2C_VERSION=YYMMDDNN tools/build.sh -> build/T2C-tesla-ui-YYMMDDNN.img
-#        write updates/1508/version.json (appver/tsl/url/msg), commit, push main
+#        write updates/1508/version.json (appver/tsl/url/msg/notes/history), commit, push main
 #        gh release create vYYMMDDNN with the image as asset
+# NOTES.md is the GitHub release text; it and NOTES.<lang>.md next to it (ko, ja, zh-CN, zh-TW)
+# also become the release notes the car page shows before an update (version.json "notes",
+# and "history" = the last 8 releases, so a car several versions behind sees every change).
 # Requires: gh (logged in), git remote "origin" on GitHub. Run from a checkout of main.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -36,12 +39,35 @@ SIZE=$(stat -f %z "$IMG" 2>/dev/null || stat -c %s "$IMG")
 echo "== updates/$BRANCH/version.json"
 MSG="T2C Tesla UI build $V"
 if [ -n "$NOTES" ] && [ -f "$NOTES" ]; then MSG=$(grep -m1 -vE '^\s*(#|$)' "$NOTES" | cut -c1-200); fi
-python3 - "$V" "$URL" "$MSG" "$BRANCH" "$RELEASE_PAGE" <<'EOF'
-import json, sys, os
-v, url, msg, branch, page = sys.argv[1:6]
+python3 - "$V" "$URL" "$MSG" "$BRANCH" "$RELEASE_PAGE" "$NOTES" <<'EOF'
+import json, sys, os, re, time
+v, url, msg, branch, page, notes_md = sys.argv[1:7]
 p = os.path.join('updates', branch, 'version.json')
 j = json.load(open(p)) if os.path.exists(p) else {}
-j.update({'appver': '%s.%s.1' % (v, branch), 'tsl': '%s.5.4' % v, 'url': url, 'msg': msg, 'release': page})
+
+def page_text(path):
+    # markdown -> plain text for the page's dialog: no headings, "- " bullets as "• "
+    out = []
+    for line in open(path, encoding='utf-8').read().splitlines():
+        line = line.rstrip()
+        if line.lstrip().startswith('#'): continue
+        line = re.sub(r'^\s*[-*] +', '• ', line)
+        line = re.sub(r'\*\*|`', '', line)
+        line = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', line)
+        if line or (out and out[-1]): out.append(line)
+    return '\n'.join(out).strip()[:2000]
+
+notes = {}
+if notes_md and os.path.exists(notes_md):
+    notes['en'] = page_text(notes_md)
+    for lang in ('ko', 'ja', 'zh-CN', 'zh-TW'):
+        q = re.sub(r'\.md$', '', notes_md) + '.' + lang + '.md'
+        if os.path.exists(q): notes[lang] = page_text(q)
+appver = '%s.%s.1' % (v, branch)
+entry = {'v': appver, 'date': time.strftime('%Y-%m-%d'), 'msg': msg, 'notes': notes}
+hist = [e for e in j.get('history', []) if e.get('v') != appver]
+j.update({'appver': appver, 'tsl': '%s.5.4' % v, 'url': url, 'msg': msg, 'notes': notes, 'release': page,
+          'history': ([entry] + hist)[:8]})
 json.dump(j, open(p, 'w'), indent=2, ensure_ascii=False); open(p, 'a').write('\n')
 print(open(p).read())
 EOF

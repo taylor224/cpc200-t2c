@@ -12,7 +12,7 @@
   };
   var CHANNELS = [6, 36, 40, 44, 48, 149, 153, 157, 161, 165];
   var CH40 = [36, 40, 44, 48, 149, 153, 157, 161];   // 5 GHz channels the hostapd wrapper runs at 40 MHz (valid HT40 pair)
-  var DIAG = ['top', 'health', 'health_saved', 'watchdog', 'crash', 't2cd', 't2cd_log', 't2cui', 'thermal', 'btaudio', 'dns', 'iptables', 'hostapd', 'hostapd_default', 'lycfg', 'system', 'mtd', 'cmdline', 'mounts', 'meminfo', 'udisk', 'etc_wifi', 'ps', 'env', 'ifconfig', 'private',
+  var DIAG = ['top', 'health', 'health_saved', 'watchdog', 'crash', 't2cd', 't2cd_log', 't2cui', 't2cui_saved', 't2cui_prev', 'thermal', 'btaudio', 'dns', 'iptables', 'hostapd', 'hostapd_default', 'lycfg', 'system', 'mtd', 'cmdline', 'mounts', 'meminfo', 'udisk', 'etc_wifi', 'ps', 'env', 'ifconfig', 'private',
     'hostapd_t2c', 't2c_hostapd', 'hostapd_log', 'flags', 'maps', 'usb', 'vht_fail', 'hostapd_caps', 'wlan_params', 'wlan_ls', 'wlan_all_sta_info', 'wlan_ap_info', 'wlan_trx_info', 'wlan_rx_signal'];
 
   var T = {};
@@ -309,6 +309,15 @@
     }
     return j.appver > appver ? j : null;
   }
+  // Release notes in the page language for every release newer than the installed one
+  // (version.json "history", newest first); older files and test entries only have "msg".
+  function noteOf(e) { var n = e.notes || {}; return n[lang] || n[lang.split('-')[0]] || n.en || e.msg || ''; }
+  function releaseNotes(j, c) {
+    var cur = appver.substring(0, 8);
+    var list = c === j ? (j.history || []).filter(function (e) { return String(e.v).substring(0, 8) > cur; }) : [];
+    if (!list.length) return noteOf(c);
+    return list.slice(0, 6).map(function (e) { return String(e.v).substring(0, 8) + '\n' + noteOf(e); }).join('\n\n');
+  }
   function checkUpdate() {
     $('sw-result').classList.add('hidden'); $('btn-check').disabled = true; toast(t('sw.checking'), 8000);
     fetch(updateBase() + '/' + branch + '/version.json?rand=' + Math.random(), { cache: 'no-store' })
@@ -318,7 +327,7 @@
         $('btn-check').disabled = false;
         if (!candidate) { toast(t('sw.latest')); return; }
         $('sw-new').textContent = t('sw.new') + ': ' + candidate.appver;
-        $('sw-note').textContent = candidate.msg || '';
+        $('sw-note').textContent = releaseNotes(j, candidate);
         $('sw-result').classList.remove('hidden'); toast(t('sw.new'));
       })
       .catch(function () { $('btn-check').disabled = false; toast(t('sw.check_fail'), 4000); });

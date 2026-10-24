@@ -6,7 +6,8 @@
 #
 # Environment: T2C_HOST (default 192.168.3.1); T2C_SSID + T2C_PSK let the script rejoin the
 # adapter's Wi-Fi on macOS if the Mac roams away while the adapter reboots; T2C_REJOIN=1 takes them
-# from t2c.cgi?a=info. Without either, the script never touches the Mac's Wi-Fi. Logs: work/flash-<timestamp>/.
+# from t2c.cgi?a=info. Without either, the script never touches the Mac's Wi-Fi. T2C_NOWAIT=1 stops
+# after a successful upload (the adapter installs on its own; check appver later). Logs: work/flash-<timestamp>/.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 IMG="${1:?usage: flash.sh IMAGE.img [--yes]}"
@@ -46,6 +47,8 @@ KERN=$(stat -f %z "$LOG/swu/kernel" 2>/dev/null || stat -c %s "$LOG/swu/kernel")
 echo "   customer=$CUST bytes kernel=$KERN bytes"
 
 echo "== 3. device log (dmesg + logcat) for partition table and memory"
+# Our firmware's t2c.cgi also shows /proc/mtd, which still has the sizes after the boot log rotated.
+curl -s -m 8 "http://$HOST/cgi-bin/t2c.cgi?a=cat&f=mtd" -o "$LOG/mtd.txt" 2>/dev/null || : > "$LOG/mtd.txt"
 if curl -s -m 90 "$BASE?id=logcat" -o "$LOG/log.bin" && python3 tools/logcat.py "$LOG/log.bin" "$LOG/log.txt"; then
   echo "   log lines: $(wc -l < "$LOG/log.txt")"
   FIRST_TS=$(grep -oEm1 '^\[ *[0-9]+' "$LOG/log.txt" | tr -d '[ ')
@@ -57,7 +60,7 @@ if curl -s -m 90 "$BASE?id=logcat" -o "$LOG/log.bin" && python3 tools/logcat.py 
   grep -iE 'mtd|partition|nand|customer|boot[^a-z]|recovery|rootfs|UDISK' "$LOG/log.txt" | grep -viE 'lylink|hostapd|wpa' | head -40 | sed 's/^/   /'
   echo "   memory:"; grep -iE '^Memory:|Memory: [0-9]+K' "$LOG/log.txt" | head -2 | sed 's/^/   /'
   # Try to read the customer partition size from "0x... - 0x... : "customer"" style lines
-  if python3 - "$LOG/log.txt" "$CUST" "$KERN" <<'EOF'
+  if python3 - "$LOG/log.txt" "$CUST" "$KERN" "$LOG/mtd.txt" <<'EOF'
 import re, sys
 txt = open(sys.argv[1], errors='replace').read()
 cust, kern = int(sys.argv[2]), int(sys.argv[3])
@@ -68,6 +71,9 @@ for m in re.finditer(r'0x([0-9a-f]+)-0x([0-9a-f]+)\s*:\s*"([^"]+)"', txt):
 for m in re.finditer(r'\[\s*([0-9a-f]{8,})\s*-\s*([0-9a-f]{8,})\s*\]\s*:?\s*"?([a-zA-Z0-9_]+)', txt):
     a, b, name = int(m.group(1), 16), int(m.group(2), 16), m.group(3)
     if name not in found and b > a: found[name] = b - a
+# /proc/mtd: 'mtd5: 00640000 00010000 "customer"'
+for m in re.finditer(r'^mtd\d+:\s+([0-9a-f]+)\s+[0-9a-f]+\s+"([^"]+)"', open(sys.argv[4], errors='replace').read(), re.M):
+    if m.group(2) not in found: found[m.group(2)] = int(m.group(1), 16)
 if not found:
     print('   partition sizes: NOT FOUND in log; verify manually before flashing'); sys.exit(2)
 for n, s in sorted(found.items()):
@@ -88,8 +94,13 @@ fi
 
 echo "== 4. current UI server"
 curl -s -m 5 -o /dev/null -w "   http://$HOST/ (OTA page) -> %{http_code}\n" "http://$HOST/" || true
-# The Tesla UI vhost answers on the AP address too; 101.200.208.6 would be routed to the public internet.
-curl -sk -m 5 -o "$LOG/ui-before.html" -w "   https://tespush.com/ via $HOST (Tesla UI) -> %{http_code} %{size_download}B\n" --resolve "tespush.com:443:$HOST" 'https://tespush.com/' || true
+# Never ask 101.200.208.6 from the Mac (routed to the public internet). The vendor UI answers on the
+# AP address too; the Rust UI binds the alias only, plus http://$HOST:8080/ for exactly this.
+ui_get() {
+  curl -s -m 10 -o "$1" -w "   Tesla UI via $HOST:8080 -> %{http_code} %{size_download}B\n" "http://$HOST:8080/" && [ -s "$1" ] && return 0
+  curl -sk -m 10 -o "$1" -w "   Tesla UI via tespush.com:443 on $HOST -> %{http_code} %{size_download}B\n" --resolve "tespush.com:443:$HOST" 'https://tespush.com/' && [ -s "$1" ]
+}
+ui_get "$LOG/ui-before.html" || true
 
 if [ "$YES" != "--yes" ]; then
   echo "== dry run complete (partition check rc=$PART_RC). Re-run with --yes to flash."
@@ -101,6 +112,10 @@ echo "== 5. upload"
 RESP=$(curl -s -m 300 -F "file=@$IMG;filename=update.img" "$BASE?id=upload")
 echo "   $RESP" | tee "$LOG/upload.json"
 echo "$RESP" | grep -q '"code": *0' || fail "upload rejected"
+if [ "${T2C_NOWAIT:-0}" = 1 ]; then
+  echo "== uploaded; not waiting (T2C_NOWAIT=1). The adapter writes ~5 min, then reboots; check appver later."
+  exit 0
+fi
 
 echo "== 6. waiting for reboot (adapter goes down, then comes back; keep it powered)"
 T0=$(date +%s); DOWN=0
@@ -120,8 +135,10 @@ sleep 15
 echo "== 7. after"
 curl -s -m 20 "$BASE?id=host" | sed -E 's/("uuid"|"imei"|"ICCD"|"iccid"|"wifi"|"mac")[[:space:]]*:[[:space:]]*"[^"]*"/\1:"***"/g'; echo
 for i in 1 2 3 4 5 6; do
-  curl -sk -m 10 -o "$LOG/ui-after.html" -w "   Tesla UI via $HOST -> %{http_code} %{size_download}B\n" --resolve "tespush.com:443:$HOST" 'https://tespush.com/' && break
+  ui_get "$LOG/ui-after.html" && break
   echo "   UI server not up yet, retrying"; sleep 10
 done
 grep -q 'h264worker\|cp-canvas' "$LOG/ui-after.html" 2>/dev/null && echo "   new UI is being served" || echo "   WARNING: new UI not detected"
+STAMP=$(sed -nE 's/.*name="t2c-build" content="([^"]*)".*/\1/p' "$LOG/ui-after.html" 2>/dev/null | head -n 1)
+[ -n "$STAMP" ] && echo "   page build stamp: $STAMP"
 echo "== done. logs in $LOG"

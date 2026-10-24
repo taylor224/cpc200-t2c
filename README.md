@@ -34,8 +34,10 @@ DNS the car uses) or `http://carplay.internal/` (needs the car to ask the adapte
 watchdog's `.internal` redirect — see NOTES; type `http://` or the trailing slash the first time so
 the browser does not run a search). Later updates are one tap: in the car
 *Settings → About → Check for updates*, or on the settings page *Software → Check for
-updates*; both read `updates/1508/version.json` from this repository and install the image
-linked there. While the page on GitHub cannot see the adapter (see below), it shows the
+updates*; both read `updates/1508/version.json` from this repository, show what changed in every
+release newer than the installed one, and install the image linked there only after you confirm.
+The car page also checks by itself (30 s after it connects, then every 6 hours) and shows
+"New update available" on its home screen; it never installs on its own. While the page on GitHub cannot see the adapter (see below), it shows the
 install stages on a timer; the adapter's own settings page shows them from the adapter's
 state.
 
@@ -109,10 +111,14 @@ and a page reload loop on resize. Carlinkit has not shipped a fix.
 **Fit the Tesla browser**
 - The layout is viewport‑driven; the root font size is derived from `devicePixelRatio`
   so the UI keeps the same physical size before and after the Tesla density change.
-- The CarPlay session size is requested from the browser: *Balanced* (default) matches
-  the browser viewport, *Sharp* matches physical pixels (1:1 on the Tesla screen),
-  *Data saver* is 0.75×, *Low* is 0.6×, *Device* restores the adapter's own HD/SD/Auto presets.
-  The session always has the viewport's aspect ratio, so nothing is cropped or stretched.
+- The CarPlay session size is requested from the browser through one *Picture quality*
+  setting with five levels: *Ultra* uses the screen's own pixels (at least 1.5× the browser
+  size, capped at the adapter's 1376×1072 pixel count), and *High*, *Balanced* (default),
+  *Low* and *Ultra low* are each 0.85× the width and height of the level above. The iPhone
+  draws CarPlay at a fixed pixel size, so a level sets sharpness, the size of the CarPlay UI
+  on the screen and the decoding cost together (it replaces the separate picture-size and
+  UI-size settings; saved choices are carried over to the nearest level). The session always
+  has the viewport's aspect ratio, so nothing is cropped or stretched.
 - Picture fit (Fit / Fill / Stretch) is a user choice; touch coordinates are mapped
   through the same rule.
 
@@ -127,9 +133,8 @@ and a page reload loop on resize. Carlinkit has not shipped a fix.
   paints the YUV planes through a WebGL shader on an OffscreenCanvas. Result: 3–5× less
   Wi‑Fi bandwidth than MJPEG and no transcoding inside the adapter. *Video transport*
   in Display settings is Automatic by default: H.264 when the browser has WebAssembly
-  SIMD + OffscreenCanvas + WebGL, MJPEG otherwise; if the decoder cannot keep up (more
-  than 40 % of frames dropped for 5 s) it switches back to MJPEG and remembers that for
-  a week. Picture / Video force one transport.
+  SIMD + OffscreenCanvas + WebGL, MJPEG otherwise (or for an hour after the decoder
+  crashed). Picture / Video force one transport.
 - Wi‑Fi: a wrapper around the adapter's `hostapd` (`src/app/hostapd`) runs the 5 GHz
   channels 36–48 and 149–161 at 40 MHz with the correct HT40 pairing (stock is 802.11n with
   `[HT40+]` on every channel, which left the default channel 161 at 20 MHz). Both channel
@@ -149,13 +154,25 @@ and a page reload loop on resize. Carlinkit has not shipped a fix.
   phone/page and only relaunched it when the phone came back over Bluetooth; a failure in that chain
   left the adapter without Wi‑Fi until a power cycle (patch 13). A watchdog (`src/app/t2c_watchdog.sh`)
   relaunches gocsdk (Bluetooth) or hostapd when either disappears and writes a health log the phone
-  page can show (`health`, `health_saved`, `watchdog`, `thermal`, `btaudio`).
-- A decoder that cannot keep up (Sharp × Smooth on an Intel-era car) steps down — frame rate to
-  Standard, then picture size to Balanced — before it ever falls back to MJPEG (now for a day, not a
-  week). A Wi‑Fi dropout is no longer mistaken for that: the decoder module is fetched again when
-  the connection is back, frames are ignored until the decoder is ready, and a failed worker is
-  rebuilt instead of being remembered as "this browser cannot decode video". About › *Recent
-  events* keeps the last 80 connection/takeover/restart/step-down events.
+  page can show (`health`, `health_saved`, `watchdog`, `thermal`, `btaudio`). It also keeps the
+  end of the UI log on the adapter's flash (`t2cui_saved`: every 2 minutes, and within 15 s of a
+  drop together with the CarPlay session's teardown lines and the hotspot's station join/leave
+  lines from logcat and the tail of the DNS forwarder's log; `t2cui_prev` = the copy from the
+  previous boot), so a CarPlay drop can still be read after the car has cut the adapter's power
+  and the adapter has been powered up again. A firmware update clears these copies (and the
+  saved health log): read them before flashing.
+- **The page never changes the picture quality, frame rate or transport by itself.** A decoder
+  that cannot keep up (more than 40 % of the frames undecoded, or a backlog that does not shrink,
+  for 5 s) only shows a hint to pick a lower quality, at most every ten minutes. Builds up to
+  26101726 stepped Smooth down to Standard and Sharp down to Balanced on their own; each step
+  restarted CarPlay and made the UI bigger, and a burst of late frames after a Wi‑Fi stall between
+  the iPhone and the adapter was enough to trigger it. A backlog that is draining no longer
+  counts. A Wi‑Fi dropout is not mistaken for a slow decoder either: the decoder module is fetched
+  again when the connection is back, frames are ignored until the decoder is ready, and a failed
+  worker is rebuilt instead of being remembered as "this browser cannot decode video". About ›
+  *Recent events* keeps the last 80 connection/takeover/restart/decoder events, and with the Rust
+  UI the page also writes them, plus a decoder line every minute (frames received / decoded,
+  decode time, busy %, worst backlog), to the adapter's `/tmp/t2cui.log`.
 - `lylinkui` no longer piles up the CarPlay video stream while no page is watching (stock
   parked its IPC thread on a condition variable whenever the stream was active but no page had
   asked for video, so the phone's frames queued up inside the process until the kernel's OOM
@@ -188,13 +205,18 @@ default base `https://raw.githubusercontent.com/taylor224/cpc200-t2c/main/update
 neither page accepts another server (no URL parameter, no settings field), so nobody with
 access to the car's screen or the hotspot can point the updater at a foreign image.
 `updates/1508/version.json` carries `appver` (compared by the phone page), `tsl`
-(compared by the Tesla page), `url` and `msg`. `url` points at the copy of the image on the
+(compared by the Tesla page), `url`, `msg`, `notes` (release notes per language: `en`, `ko`, …) and
+`history` (the last 8 releases with their notes, newest first, so a car several versions behind
+sees every change). `url` points at the copy of the image on the
 orphan `releases` branch (served by raw.githubusercontent.com with CORS headers; GitHub
 release assets are not, so a browser cannot fetch them); the same file is attached to the
 GitHub release for manual download. Build a release
 with `T2C_VERSION=YYMMDDNN tools/build.sh`, which stamps that date into `app/system.json`
 so the adapter reports the new version afterwards. `tools/release.sh YYMMDDNN [NOTES.md]` does the whole
-cycle: build, rewrite `version.json`, commit, push, GitHub release with the image attached.
+cycle: build, rewrite `version.json`, commit, push, GitHub release with the image attached. NOTES.md
+is the GitHub release text and the English notes; `NOTES.ko.md` (also `.ja`, `.zh-CN`, `.zh-TW`)
+next to it gives the other languages. The build stamps the version into the car page too: a page
+left open across a firmware update reloads itself once when it sees the new version.
 
 **Phone page (`http://192.168.3.1/`, `src/ota-www`)**
 - Same design language as the Tesla page, five languages, dark mode follows the phone.
@@ -226,7 +248,7 @@ cycle: build, rewrite `version.json`, commit, push, GitHub release with the imag
   iPhone; nothing in this firmware can change it.
 - The WebAssembly decoder runs single‑threaded (the adapter's server cannot send the
   COOP/COEP headers needed for threads). Intel‑era cars (MCU2) may not sustain 30 fps
-  at the *Sharp* size; use *Balanced* or let Automatic fall back to MJPEG. JPEG quality
+  at the *Ultra* level; pick a lower level (the page suggests it) or *Picture*. JPEG quality
   in MJPEG mode is fixed inside the adapter binaries.
 - The `customer` squashfs grows by about 250 KB (6.07 → 6.31 MB; xz compresses the decoder well).
   The partition is 6,553,600 B on the 16 MiB SPI NOR of the tested unit (236 KB spare), and the

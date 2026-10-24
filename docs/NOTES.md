@@ -867,7 +867,7 @@ Bench (devserver 768×608 @ 30 fps, headless Chrome, `document.hidden` overridde
 phone → socket kept, 0 fps/0 rx while hidden, back at 23 fps within one key frame; hidden without a
 phone → close 1005, reconnect on visible. Device test pending (the adapter was not reachable).
 
-## Decoder too slow: step down instead of MJPEG-for-a-week (26101701)
+## Decoder too slow: step down instead of MJPEG-for-a-week (26101701, removed in 26101727)
 
 Sharp (1536×960 here) × Smooth (the adapter asks the iPhone for a higher frame rate; stock Standard
 is already 40 fps in `ScreenPlayerSetParam`) is more pixels per second than an Intel-era car decodes in
@@ -877,7 +877,7 @@ good, 10–30 min in, and MJPEG at that size means the adapter's own decode+JPEG
 Now `h264Failed('slow')` first sets the frame rate back to Standard (`KEY.FPS` 0, the adapter restarts
 the session), on the next verdict the picture size Sharp → Balanced, and only then MJPEG, for a day.
 Each step is a toast and an event. Bench: devserver at 400 units/s → 'slow' → `setkey fps 0`, then
-`sharp → balanced`.
+`sharp → balanced`. Removed in 26101727: see "Disconnects, then a huge screen" below.
 
 ## Watchdog and health log (`src/app/t2c_watchdog.sh`, 26101701)
 
@@ -1123,6 +1123,138 @@ string refs resolved as `ldr rX,[pc]` + `add rX,pc,rX`):
   "Connected", Connect sent `AT#CD<name>` (dropped) and the forget-while-connected path never
   ran. Now `bt` = the address from the phone's `SV`/`SS` service lines (`SV<addr:12><uuid>`),
   `bt_conf.ini`'s `lastaddr` until one came, empty without a phone.
+
+## Disconnects, then a huge screen in Balanced = the page's own step-down (fixed in 26101727)
+
+Reported 2026-10-23 on 26101726: CarPlay works for a while, then drops out and comes back with
+everything much bigger, the picture size set to Balanced. Read from the adapter (grab over the
+hotspot, uptime 52 min, no crash/reboot/OOM): every session restart in `/tmp/t2cui.log` came from
+the page — 06:04 `setting key 9 = 0` (Smooth → Standard), 26:49 and 43:17 `setting key 2 = 0` with
+the override 1360×1088 → 800×640 (Sharp → Balanced). Page hello 804×638, so Balanced = 1:1 CSS
+pixels, a third of Sharp's pixels, and iOS's fixed-size UI is ~1.7× bigger on the screen. The
+user put Sharp back from the menu each time (27:06; 44:46 Balanced + UI Small = 1008×800).
+
+Trigger: lylinkapp logged `_AirPlayReceiverSessionScreen_ProcessFrame Late frame (150–2140 ms)`
+and `Read(body) ... kTimeoutErr` (the iPhone → adapter stream stalled) at 25:18–25:45, 26:41,
+42:21 (2.1 s) and 43:00, right before both Sharp → Balanced steps. Frames that were held up arrive
+together, the page's queue passes 15 and the old verdict (backlog > 15 for 5 s) fired while the
+decoder was still catching up. The Smooth → Standard step at 06:04 had no late frames around it
+(1360×1088 × Smooth seems to be more than that car decodes). Adapter load 3–4.5, ~10 Mbit/s each
+way on wlan0.
+
+26101727:
+- **No automatic change of quality, frame rate or transport any more** (user: "자기 멋대로 해상도
+  바꾸도록 하지는 마"). The 'slow' verdict logs an event (once a minute at most) and shows a hint
+  (`video.slow`, once per 10 min); Automatic transport goes to MJPEG only after a decoder error.
+- Verdict: a backlog counts only while it is not shrinking (or was thrown away at 90 in that
+  second); 40 % undecoded for 5 s still counts. Bench at 500 units/s: `slow` every 5 s, `q<=91`.
+- **Picture size and UI size are one setting, five levels** (user's names: 초고해상도 · 고해상도 ·
+  균형 · 저해상도 · 초저해상도). Scale (session px per CSS px) of the top level = max(DPR, 1.5)
+  capped by 1376×1072 pixels and 1920×1200; each level is 0.85× per side. 804×638 @1.7: 1360×1088,
+  1152×912, 992×784, 832×672, 704×560. 1254×784 @1.53: 1536×960, 1312×816, 1104×688, 944×592,
+  800×496. Old `res` × `uiScale` map to the nearest level (log distance; `device` → Balanced),
+  `t2c.res`/`t2c.uiScale` and the old day-long MJPEG verdict are removed. The adapter-preset choice
+  ("Device", HD/SD/Auto buttons) is gone; the Auto-flow fallback for firmware that ignores the
+  override (`sessAuto`) stays.
+- **The page writes to the adapter log** (Rust UI, init JSON `"ui": "rust"`): page message type 14
+  = one UTF-8 line (≤ 240 chars, control characters blanked), logged as `page #N: <line>`, 40 lines
+  per page per minute. Lines: every About › Recent events entry (open, init, link, restart,
+  quality, slow, decoder-*), queued (newest 30) while the socket is down, and once a minute while
+  video plays `stats WxH level 60s rx N/s dec N/s X ms (Y% busy) q<=N behind Ns dropped N slow N`.
+  `t2c.cgi?a=cat&f=t2cui` shows it.
+
+## Old menus after a flash, release notes, update banner, saved UI log (26101728)
+
+2026-10-24, right after 26101727 was flashed with `tools/flash.sh` (upload 13:36, offline at
+289 s, back at 309 s with appver `26101727.1508.1`): the user still saw *Display → Picture size*
+with "Device" and *CarPlay UI size* while About showed 26101727. Those are 26101726 strings
+(`disp.ui_scale`, `disp.res_device`); 26101727 has neither. The car browser had kept the page it
+loaded before the flash and only reconnected its WebSocket; the version on screen comes from the
+init JSON, so the old page showed the new number. The page's "Reload page" button (sidebar)
+loads the new one.
+
+26101728:
+- `tools/build.sh` writes `app/system.json`'s appver into `<meta name="t2c-build">` of index.in /
+  index.html. `onInit` compares it with the adapter's `SW`; on a difference it logs `stale page
+  A -> B` and reloads once per version (sessionStorage `t2c.staleFor`, plus the reload-loop guard).
+  Bench (mock, stamp 26101726, SW 26101727): one reload, the reloaded page stays.
+- Update check: release notes for every release newer than the installed one (version.json
+  `history`, notes in the page language, fallback `en` then `msg`), "Later" / "Update". The car
+  page also checks 30 s after connecting and every 6 h; a newer release shows a banner on the home
+  screen (tap = the same dialog) and a note next to the version in About. Nothing installs by
+  itself. The phone page shows the same notes. `tools/release.sh` fills `notes`/`history` from
+  NOTES.md and NOTES.<lang>.md.
+- The watchdog copies the last 14 KB of `/tmp/t2cui.log` plus the last 20 health lines to
+  `/mnt/UDISK/t2c_ui_saved.log` every 2 minutes when the log changed (`a=cat&f=t2cui_saved`).
+  Reason: the same day the user saw CarPlay drop to "Waiting for iPhone" once and not come back,
+  after the flash. By the time the Mac could reach the adapter again it was out of range, and
+  `/tmp` had gone with the power. The pre-flash log of that drive (1726, booted 13:26) only has the
+  page's own setting restarts, each with the iPhone back within 1–3 s. Cause still unknown. Before
+  the flash the Mac was on the iPhone's Personal Hotspot ("토뭉이폰2", ch 149 like AutoKit, CarPlay
+  running at the same time), and it went back to it right after the flash; whether that keeps the
+  iPhone off AutoKit is unproven.
+- `tools/flash.sh`: the partition check also reads `/proc/mtd` through `t2c.cgi?a=cat&f=mtd`, so
+  it no longer needs a fresh boot log. The UI check uses `http://192.168.3.1:8080/`, because the
+  Rust UI binds 443 only on 101.200.208.6 and the old `--resolve` check always printed 000. The
+  check prints the page build stamp. `T2C_NOWAIT=1` stops after the upload.
+
+## A drop in the last minutes before a power cut was lost; DNS gap at every PAN (re)connect (26101729)
+
+2026-10-24, 26101728 in the car: CarPlay stopped mid-drive, the page logged `close 1006`, and a little
+later `carplay.internal` gave the Tesla's "DNS address not found". The user unplugged the adapter a few
+minutes after that; the next boot's watchdog overwrote `/mnt/UDISK/t2c_ui_saved.log` two minutes in, and
+the 10-minute health snapshots only showed streaming (3 stations, ~12 Mbit/s, memory flat, no process
+restart) up to nine minutes before the unplug. So the cause of that drop is not known. Two things that
+followed from it:
+
+- **Watchdog, UI log retention.** At start the previous boot's copy moves to `t2c_ui_saved.log.prev`
+  (`a=cat&f=t2cui_prev`); it is overwritten only by the boot after. Within one tick (15 s) of a drop
+  line in `/tmp/t2cui.log` (`"link": 0`, `phone false`, `page #N gone`, `session restart/stop`,
+  `t2cui start`) the copy is written at once, with the CarPlay-session lines of logcat appended
+  (`Teardown`, `TimeoutErr`, `Sender idle`, `NetworkChange`, `Removing CarPlayController`,
+  `CPClientDisconnect`, and the hotspot's station join/leave lines `uiwif: add_device|del_device
+  mac=…` / `applk: OnNotifyWifi … disconnect`, added in 26101730 after the first filter missed them)
+  plus the last 30 lines of `/tmp/t2cd.log` (upstream DNS state, SERVFAILs the car got). Those lines
+  named the reason of the 15:08 drop (phone left Wi‑Fi, idle timeout) and they live in RAM otherwise.
+  The plain 2-minute copy stays as before. Both files together stay under 40 KB; UDISK had 840 KB free.
+  The group that writes the copy must end in a command that succeeds (`|| :` on the last `tail`): with
+  `{ …; } > tmp && mv`, a missing `/tmp/t2cd.log` would have silently cancelled every drop save
+  (caught by the Mac unit test, where that file does not exist). 26101730's first boot showed the
+  next hole: the drop save is a full rewrite, and so is the plain 2-minute save, so as soon as one
+  more line followed the drop (`ip_forward=1`, a page reconnecting) the plain save replaced the copy
+  without the logcat section (saved file = log + header + health to the byte). Since 26101731 the
+  logcat/t2cd section is written to `/tmp/t2c_drop_tail` at a drop and appended to every later save
+  until the next drop replaces it.
+  **An OTA update clears these copies**: `/mnt/UDISK/t2c_health.log` restarted from `up=632` after
+  both the 26101728 and the 26101729 update, and `t2c_ui_saved.log.prev` was absent after 26101729,
+  while `lycfg.txt` and the Bluetooth pairing survive. So `t2cui_prev` is evidence across a power cut
+  or a reboot, not across a flash: read the previous boot's copy before updating (`tools/flash.sh`
+  does not; the scratch flash script pulls `t2cui`/`health_saved` first).
+- **No nat flush on PAN up.** `pan_ip_forward` (stock `btpan_ipForward`, run on every `NC` = Bluetooth
+  PAN up) did `iptables -t nat -F`, which also removed t2cd's udp/53 REDIRECT until the 20 s keeper put
+  it back; nothing listens on port 53 itself, so in that window the car's DNS got ICMP unreachable at
+  once. The car's connectivity check (DNS of `connman.vn.tesla.services` + `GET /online/status.html`)
+  failing once is exactly what makes the Tesla move its default route to LTE: open sockets to
+  101.200.208.6 break (`close 1006` on the page) and `carplay.internal` no longer resolves. Seen at
+  boot (rule gone 00:00:21, back 00:00:26); the PAN also reconnects while driving. Now only our own
+  `POSTROUTING -o bt-pan -j MASQUERADE` is deleted (twice, in case of a duplicate) and re-added; the
+  filter flush and the policies stay as stock. Whether this was the cause of the 20:4x drop is unproven
+  (the health snapshots' bt-pan counters never reset at the 10-minute marks, so no PAN bounce is
+  visible there, but the last nine minutes are unsampled).
+
+Also learned: the third station on the hotspot (`02:42:6b:17:34:09`, 20 MHz, a few KB/min) travels with
+the user (watch or tablet), it is not the car: it joined 7 s after the phone on the boot after the
+unplug (adapter carried home) and left 1 s after the phone that evening; `sta=3` while driving =
+phone + car + that device. The page keeps its own event list in localStorage (About › Recent events):
+after a drop that list, read in the car, is evidence that survives everything on the adapter.
+
+The same evening gave a second case of the stale-Bluetooth no-recovery pattern (see "대기중" above):
+at home, 23:06:55, the phone left the hotspot cleanly (`del_device` for the phone, then for the
+02:42 device one second later, no idle timeout, nothing in dmesg), lylinkapp tore the session down
+(`kTimeoutErr`, `Session Teardown`), t2cui logged `link 0 / phone false`, and gocsdk never reported
+`DR`, so the PAN loop never re-paged: no CarPlay for 53 minutes until the 26101729 flash rebooted the
+adapter, after which the phone was back in 25 s. Twice in one day; the re-page fix (AT#CD + AT#CC with
+backoff when CarPlay is down but `bt_connected` is true) is still the open item.
 
 ## Rust UI opt-in (`/mnt/UDISK/t2c_ui_rust`, 26101707 .. 26101718)
 
