@@ -105,6 +105,18 @@ print('   ' + open(p).read())
 EOF
 fi
 
+# The page reloads itself when the adapter reports another version than the one it was built
+# with (the car browser keeps the old page across a firmware update): stamp appver into it.
+python3 - "$WORK/customer/app/system.json" "$WORK/customer/app/www" <<'EOF'
+import json, os, sys
+v = json.load(open(sys.argv[1]))['appver']
+for n in ('index.in', 'index.html'):
+    p = os.path.join(sys.argv[2], n); s = open(p, encoding='utf-8').read()
+    assert s.count('@T2C_BUILD@') == 1, p
+    open(p, 'w', encoding='utf-8').write(s.replace('@T2C_BUILD@', v))
+print('   page build stamp: ' + v)
+EOF
+
 echo "== app/lyLoadModule.sh: pass rtw_country_code=XX to the Wi-Fi driver when /mnt/UDISK/t2c_country holds two letters"
 python3 - "$WORK/customer/app/lyLoadModule.sh" <<'EOF'
 import sys

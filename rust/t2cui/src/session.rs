@@ -92,9 +92,15 @@ pub struct Client {
     pub hello: Mutex<Option<Hello>>,
     pub peer: String,
     pub dropped: AtomicU64,
+    /// page log lines (type 14) in the current minute: (window start, lines)
+    log_budget: Mutex<(Instant, u32)>,
 }
 
 pub const CLIENT_QUEUE: usize = 16;
+/// Page log lines a page may write per minute (it sends one stats line a minute plus events,
+/// and up to 30 queued lines after a reconnect); the rest is dropped so the 64 KB log keeps
+/// the adapter's own history.
+const PAGE_LOG_PER_MIN: u32 = 40;
 
 impl Client {
     /// true if queued; false = queue full (frame dropped) or client gone
@@ -387,6 +393,7 @@ impl Session {
             hello: Mutex::new(None),
             peer,
             dropped: AtomicU64::new(0),
+            log_budget: Mutex::new((Instant::now(), 0)),
         });
         st.clients.push(c.clone());
         drop(st);
@@ -768,6 +775,21 @@ impl Session {
                 self.wifi_handoff(true);
                 self.request_restart("wifi password");
             }
+            ClientMsg::PageLog(line) => {
+                let n = {
+                    let mut b = c.log_budget.lock().unwrap_or_else(|e| e.into_inner());
+                    if b.0.elapsed() >= Duration::from_secs(60) {
+                        *b = (Instant::now(), 0);
+                    }
+                    b.1 += 1;
+                    b.1
+                };
+                if n <= PAGE_LOG_PER_MIN {
+                    self.log.log(&format!("page #{}: {}", c.id, line));
+                } else if n == PAGE_LOG_PER_MIN + 1 {
+                    self.log.log(&format!("page #{}: (more log lines this minute dropped)", c.id));
+                }
+            }
             ClientMsg::Unknown(t, n) => self.log.dbg(&format!("page #{} unknown type {} ({} B)", c.id, t, n)),
         }
     }
@@ -956,7 +978,7 @@ impl Session {
         let i = &self.info;
         let auto = cfg.auto();
         format!(
-            "{{\"link\": {}, \"phone\": {}, \"bt\": {}, \"auto\": {}, \"ssid\": {}, \"psk\": {}, \"ch\": {}, \"sh\": {}, \"night\": {}, \"pixel\": {}, \"driver\": {}, \"fps\": {}, \"vid\": {}, \"icons\": {}, \"icon\": {}, \"name\": {}, \"lan\": {}, \"SN\": \"TesPush_T2C\", \"SW\": {}, \"LY\": {}, \"HW\": {}, \"MD\": {}, \"imei\": \"\", \"ccid\": \"\", \"btnet\": {}, \"wifi\": {}, \"bl\": 0, \"online\": {}, \"usb\": {}}}",
+            "{{\"link\": {}, \"phone\": {}, \"bt\": {}, \"auto\": {}, \"ssid\": {}, \"psk\": {}, \"ch\": {}, \"sh\": {}, \"night\": {}, \"pixel\": {}, \"driver\": {}, \"fps\": {}, \"vid\": {}, \"icons\": {}, \"icon\": {}, \"name\": {}, \"lan\": {}, \"SN\": \"TesPush_T2C\", \"SW\": {}, \"LY\": {}, \"HW\": {}, \"MD\": {}, \"imei\": \"\", \"ccid\": \"\", \"btnet\": {}, \"wifi\": {}, \"bl\": 0, \"online\": {}, \"usb\": {}, \"ui\": \"rust\"}}",
             st.link, st.phone, p::js(&i.bt_name), auto, p::js(&i.ssid), p::js(&cfg.psk()), cfg.channel(),
             0, cfg.night(), cfg.pixel(), cfg.driver(), cfg.fps(),
             cfg.mode() == 1, i.icons, p::js(&cfg.icon()), p::js(&cfg.name()), cfg.lang(), p::js(&i.sw), p::js(&i.ly), p::js(&i.hw), p::js(&i.md),

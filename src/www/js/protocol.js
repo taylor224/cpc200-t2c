@@ -11,6 +11,8 @@
  *     type 11 : session override [w, h] + u8 mm_w + u8 mm_h (0 width clears)
  *     type 12 : ping    Uint32 [0x000C0004, counter]
  *     type 13 : key     [key, mod]
+ *     type 14 : page log line (UTF-8, Rust UI only: written to /tmp/t2cui.log so the adapter's
+ *               log shows what the page saw — decoder warnings, stats, link events)
  *     type 4/5/6/9 : string payload (bt connect / disconnect / forget / wifi psk)
  *   server -> client : Uint32 header [length, type] followed by payload
  *     (an access unit that cannot be reassembled is reported as 'videodrop' so the app can ask for a key frame)
@@ -229,6 +231,7 @@
   LinkClient.prototype.btDisconnect = function (mac) { return this.sendString(5, mac); };
   LinkClient.prototype.btForget = function (mac) { return this.sendString(6, mac); };
   LinkClient.prototype.setWifiPassword = function (psk) { return this.sendString(9, psk); };
+  LinkClient.prototype.sendLog = function (line) { return this.sendString(14, String(line).substring(0, 240)); };
 
   /** Car name (max 12 UTF-8 bytes) and icon id (ascii). */
   LinkClient.prototype.setCarIdentity = function (name, icon) {

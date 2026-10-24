@@ -6,6 +6,9 @@
     // Firmware update server (<base>/<branch>/version.json). Fixed on purpose: the page
     // offers no way to install firmware from anywhere else.
     UPDATE_BASE_URL: 'https://raw.githubusercontent.com/taylor224/cpc200-t2c/main/updates',
+    // Background update check: first this long after the page connects, then at this interval.
+    UPDATE_FIRST_MS: 30000,
+    UPDATE_CHECK_MS: 6 * 3600 * 1000,
     // CarPlay session size limits (the adapter's own "HD" preset is 1376x1072).
     MAX_SESSION_AREA: 1376 * 1072,
     MAX_W: 1920,
@@ -13,8 +16,13 @@
     // The iPhone draws CarPlay at a fixed pixel size whatever session size and physical size the
     // adapter reports (measured 640-1184 px wide, 60-255 mm: icons always ~120 px). The UI only
     // looks bigger or smaller on the Tesla screen through the picture being enlarged more or less,
-    // so "UI size" scales the session pixel count. The physical size is just kept plausible.
-    UI_SCALE: { small: 1.25, normal: 1, large: 0.8 },
+    // so one setting — the quality level — sets sharpness, UI size and decoding cost together.
+    // The top level uses the screen's own pixels (at least QUALITY_TOP_MIN x the browser size,
+    // within the limits above); each level below is QUALITY_STEP x the width and the height
+    // (0.72 x the pixels to decode). The physical size is just kept plausible.
+    QUALITY: ['ultra', 'high', 'balanced', 'low', 'ultralow'],
+    QUALITY_STEP: 0.85,
+    QUALITY_TOP_MIN: 1.5,
     PX_PER_MM: 5.2,
     RESIZE_RELOAD_PX: 48,
     // Name of the car's own app in the CarPlay app grid (the adapter's built-in default is "Auto").
@@ -37,12 +45,43 @@
 
   var prefs = {
     theme: store.get('theme', 'auto'),
-    res: store.get('res', 'balanced'),
-    uiScale: store.get('uiScale', 'normal'),
+    quality: loadQuality(),
     fit: store.get('fit', 'contain'),
     stats: store.get('stats', false),
     transport: store.get('transport', 'auto')
   };
+
+  /** Session scale (session px per CSS px) of a quality level for a viewport. */
+  function qualityScale(level, vw, vh) {
+    var top = Math.max(window.devicePixelRatio || 1, CONFIG.QUALITY_TOP_MIN);
+    top = Math.min(top, Math.sqrt(CONFIG.MAX_SESSION_AREA / (vw * vh)), CONFIG.MAX_W / vw, CONFIG.MAX_H / vh);
+    return top * Math.pow(CONFIG.QUALITY_STEP, Math.max(0, CONFIG.QUALITY.indexOf(level)));
+  }
+
+  /* Builds up to 26101726 stored a picture size (sharp = screen pixels, balanced 1, saver 0.75,
+   * low 0.6, device = the adapter's presets) and a separate UI size (small 1.25, normal 1,
+   * large 0.8). Both become the one quality level whose session is closest to their product.
+   * The old builds' "decoder too slow: Picture for a day" verdict is dropped with them. */
+  function loadQuality() {
+    var q = store.get('quality', null);
+    if (CONFIG.QUALITY.indexOf(q) >= 0) return q;
+    q = 'balanced';
+    var res = store.get('res', null);
+    if (res && res !== 'device') {
+      var vw = window.innerWidth || 1, vh = window.innerHeight || 1;
+      var old = ({ sharp: qualityScale('ultra', vw, vh), balanced: 1, saver: 0.75, low: 0.6 })[res] || 1;
+      old *= ({ small: 1.25, normal: 1, large: 0.8 })[store.get('uiScale', 'normal')] || 1;
+      var best = Infinity;
+      CONFIG.QUALITY.forEach(function (l) {
+        var d = Math.abs(Math.log(old / qualityScale(l, vw, vh)));
+        if (d < best) { best = d; q = l; }
+      });
+    }
+    store.set('quality', q);
+    store.set('h264slow', 0);
+    try { localStorage.removeItem('t2c.res'); localStorage.removeItem('t2c.uiScale'); } catch (e) { /* ignore */ }
+    return q;
+  }
 
   var state = {
     init: null, link: -1, phone: false, linking: false, page: 'home',
@@ -53,9 +92,9 @@
     pixel: 3, vid: false, fps: 0,
     carUi: false,          // iPhone asked for the car's own UI (Carlinkit app tapped in CarPlay)
     elsewhere: false,      // another page connected to the adapter and took over (retried by itself)
-    updating: false, updateUrl: null,
+    updating: false, updateUrl: null, updateAvail: null, updateLogged: false,
     hasCell: true,
-    sessWanted: null,      // session size this page asked for (null = adapter preset)
+    sessWanted: null,      // session size this page asked for
     sessSig: '', sessRestartAt: 0, sessNew: false, sessMismatch: 0
   };
 
@@ -131,7 +170,31 @@
     list.push({ t: Date.now(), k: kind, d: detail === undefined || detail === null ? '' : String(detail) });
     while (list.length > EVENTS_MAX) list.shift();
     store.set('events', list);
-    console.log('[t2c] ' + kind + (detail !== undefined && detail !== null ? ' ' + detail : ''));
+    var line = kind + (detail !== undefined && detail !== null && detail !== '' ? ' ' + detail : '');
+    console.log('[t2c] ' + line);
+    reportLine(line);
+  }
+
+  /* The same events, and the decoder's numbers once a minute, go to the adapter's log
+   * (/tmp/t2cui.log, page message type 14) so a problem in the car can be read from the adapter
+   * afterwards. Rust UI only (the init JSON says ui: "rust"; the vendor UI does not know the
+   * message). Lines written while the socket is down wait for the next init, the newest 30. */
+  var reportQueue = [];
+  function reportLine(line) {
+    if (line) { reportQueue.push(line); if (reportQueue.length > 30) reportQueue.shift(); }
+    if (!link.open || !state.init) return;
+    if (state.init.ui !== 'rust') { reportQueue = []; return; }
+    while (reportQueue.length && link.sendLog(reportQueue[0])) reportQueue.shift();
+  }
+
+  var REPORT_EVERY = 60000;
+  function reportVideo() {
+    var r = presenter.takeReport();
+    if (r.mode !== 'h264' || !r.rx || r.secs < 1 || state.link < 2) return;
+    reportLine('stats ' + r.w + 'x' + r.h + ' ' + prefs.quality + (state.fps === 1 ? ' smooth' : '') + ' ' + Math.round(r.secs) + 's' +
+      ' rx ' + (r.rx / r.secs).toFixed(1) + '/s dec ' + (r.dec / r.secs).toFixed(1) + '/s ' +
+      (r.dec ? (r.ms / r.dec).toFixed(1) : '0') + ' ms (' + Math.round(r.ms / (r.secs * 10)) + '% busy)' +
+      ' q<=' + r.qmax + ' behind ' + r.behind + 's dropped ' + r.dropped + ' slow ' + r.slow);
   }
   function eventsDialog() {
     var list = store.get('events', []);
@@ -233,7 +296,6 @@
 
   /* ------------------------------------------------------- transport */
 
-  var H264_SLOW_TTL = 86400 * 1000;       // a decoder that cannot keep up even at Balanced/Standard: MJPEG for a day
   var H264_ERROR_TTL = 3600 * 1000;       // a crash or a lost GPU context: try again in an hour
 
   var videoHeld = 0;    // transient decoder trouble: Picture for this session, Video retried later
@@ -254,16 +316,33 @@
       state.vid = want;
       // The adapter picks the pipeline when the iPhone's video starts: an active session has to be
       // restarted — unless applySession() is about to do that anyway by leaving Auto.
-      var leavingAuto = state.pixel === 3 && !!computeSession() && !store.get('sessAuto', false);
+      var leavingAuto = state.pixel === 3 && !store.get('sessAuto', false);
       if ((state.link >= 1 || userAction) && !leavingAuto) restartSession();
     }
   }
 
-  /* The browser cannot decode this many pixels per second (Sharp × Smooth on an Intel-era car, for
-   * instance). Give up frame rate first (same sharpness), then picture size; only when Balanced at the
-   * standard rate is still too much does the page fall back to MJPEG, for a day rather than a week.
-   * Before this, Smooth could drive the page into MJPEG-for-a-week and a session restart after 10–30
-   * minutes of driving, once the map started moving for good. */
+  /* The browser cannot decode this many pixels per second (Ultra x Smooth on an Intel-era car, for
+   * instance). Nothing is changed on the driver's behalf: a lower quality, frame rate or the
+   * Picture transport each restart the CarPlay session (the picture drops out for seconds), and a
+   * lower quality makes the CarPlay UI bigger. Up to 26101726 the page stepped Smooth down to
+   * Standard and Sharp down to Balanced by itself, and a Wi-Fi burst from the iPhone was enough to
+   * set it off — the driver saw "disconnects, then the screen is huge" (2026-10-23). Now the page
+   * says so, at most every SLOW_HINT_GAP, and the adapter log gets the numbers (one event a
+   * minute at most; the verdict repeats every 5 s while it lasts). */
+  var SLOW_HINT_GAP = 600000, slowHintAt = 0;
+  var SLOW_LOG_GAP = 60000, slowLogAt = 0, slowQuiet = 0;
+  function videoSlow() {
+    var now = Date.now(), ss = state.sessWanted;
+    if (now - slowLogAt >= SLOW_LOG_GAP) {
+      logEvent('slow', prefs.quality + (ss ? ' ' + ss.w + 'x' + ss.h : '') + (state.fps === 1 ? ' smooth' : '') +
+        ' backlog ' + presenter.queue.length + (slowQuiet ? ' (+' + slowQuiet + ' since the last)' : ''));
+      slowLogAt = now; slowQuiet = 0;
+    } else slowQuiet++;
+    if (now - slowHintAt < SLOW_HINT_GAP) return;
+    slowHintAt = now;
+    toast(t('video.slow'), 8000);
+  }
+
   var transientFails = [];
   function h264Failed(reason, transient) {
     console.warn('h264 fallback:', reason, transient ? '(transient)' : '');
@@ -288,24 +367,9 @@
       applyTransport(true);
       return;
     }
-    if (reason === 'slow' && link.open) {
-      if (state.fps === 1) {
-        logEvent('slow', 'frame rate smooth -> standard');
-        state.fps = 0; link.setKey(KEY.FPS, 0); segSet('seg-fps', 0);     // the adapter restarts the session
-        toast(t('video.fps_lowered'), 7000);
-        return;
-      }
-      if (prefs.res === 'sharp') {
-        logEvent('slow', 'picture size sharp -> balanced');
-        prefs.res = 'balanced'; store.set('res', 'balanced'); store.set('sessAuto', false); segSet('seg-res', 'balanced');
-        toast(t('video.res_lowered'), 7000);
-        applySession(true);
-        return;
-      }
-    }
     logEvent('h264-fallback', reason);
-    store.set('h264slow', Date.now() + (reason === 'slow' ? H264_SLOW_TTL : H264_ERROR_TTL));
-    toast(t(reason === 'slow' ? 'video.slow' : 'video.unsupported'), 5000);
+    store.set('h264slow', Date.now() + H264_ERROR_TTL);
+    toast(t('video.unsupported'), 5000);
     if (prefs.transport === 'video') { prefs.transport = 'auto'; store.set('transport', 'auto'); segSet('seg-mode', 'auto'); }
     applyTransport(true);
   }
@@ -388,35 +452,21 @@
   /* ------------------------------------------------- CarPlay session size */
 
   function computeSession() {
-    var dpr = window.devicePixelRatio || 1;
     var vw = window.innerWidth, vh = window.innerHeight;
-    var s;
-    switch (prefs.res) {
-      case 'sharp': s = dpr; break;
-      case 'saver': s = 0.75; break;
-      case 'low': s = 0.6; break;
-      case 'device': return null;
-      default: s = 1;
-    }
-    var k = CONFIG.UI_SCALE[prefs.uiScale] || 1;
-    var w = vw * s * k, h = vh * s * k;
-    var area = w * h;
-    if (area > CONFIG.MAX_SESSION_AREA) { var k = Math.sqrt(CONFIG.MAX_SESSION_AREA / area); w *= k; h *= k; }
-    if (w > CONFIG.MAX_W) { h = h * CONFIG.MAX_W / w; w = CONFIG.MAX_W; }
-    if (h > CONFIG.MAX_H) { w = w * CONFIG.MAX_H / h; h = CONFIG.MAX_H; }
-    w = Math.max(320, Math.round(w / 16) * 16);
-    h = Math.max(240, Math.round(h / 16) * 16);
+    var s = qualityScale(prefs.quality, vw, vh);
+    var w = Math.max(320, Math.round(vw * s / 16) * 16);
+    var h = Math.max(240, Math.round(vh * s / 16) * 16);
     var mmw = w / CONFIG.PX_PER_MM, mmh = h / CONFIG.PX_PER_MM;
     if (mmw > 255 || mmh > 255) { var k2 = 255 / Math.max(mmw, mmh); mmw *= k2; mmh *= k2; }
     return { w: w, h: h, mmw: Math.round(mmw), mmh: Math.round(mmh) };
   }
 
   function sessionSignature(ss) {
-    return ss ? [ss.w, ss.h, ss.mmw, ss.mmh].join('x') : 'device' + state.pixel;
+    return [ss.w, ss.h, ss.mmw, ss.mmh].join('x');
   }
 
   function setPixel(p) {
-    link.setKey(KEY.PIXEL, p); state.pixel = p; segSet('seg-pixel', p);
+    link.setKey(KEY.PIXEL, p); state.pixel = p;
     state.sessRestartAt = Date.now(); state.sessNew = false;
   }
 
@@ -435,7 +485,7 @@
       if (!restartTimer) restartTimer = setTimeout(function () { restartTimer = 0; restartSession(); }, wait);
       return;
     }
-    if (prefs.res === 'device' || store.get('sessAuto', false)) {
+    if (store.get('sessAuto', false)) {
       state.sessRestartAt = Date.now();
       logEvent('restart', 'reload (auto flow)');
       setTimeout(reload, 400);
@@ -450,35 +500,26 @@
     var ss = computeSession();
     var sig = sessionSignature(ss);
     state.sessWanted = ss;
-    $('session-info').textContent = ss ? (ss.w + ' × ' + ss.h + ' · ' + ss.mmw + ' × ' + ss.mmh + ' mm') : t('disp.res_device');
-    $('row-pixel').classList.toggle('hidden', !!ss);
-    $('row-uiscale').classList.toggle('hidden', !ss);
+    $('session-info').textContent = ss.w + ' × ' + ss.h + ' · ' + ss.mmw + ' × ' + ss.mmh + ' mm';
     if (!link.open) return;
     var changed = sig !== state.sessSig;
     state.sessSig = sig;
-    if (ss) {
-      link.setSessionOverride(ss.w, ss.h, ss.mmw, ss.mmh);
-      if (store.get('sessAuto', false)) {
-        // Auto flow: every hello restarts the session (and the iPhone's Bluetooth PAN with it);
-        // a changed override needs a reload to get one.
-        if (state.pixel !== 3) { setPixel(3); session.set('sess', sig); }
-        else if (session.get('sess') !== sig) { session.set('sess', sig); if (state.link >= 1 || userAction) restartSession(); }
-      } else if (state.pixel === 3) {
-        // Leave Auto. In Auto every hello — reconnect, reload, a second page — restarts the
-        // CarPlay session. With a fixed preset it restarts only when asked, and the override
-        // keeps its size; the change itself restarts the session once, override in place.
-        setPixel(0);
-      } else if (userAction && changed) {
-        restartSession();
-      }
-      // Otherwise nothing: verifySession() restarts only if the picture that arrives has
-      // another size than requested (the override is lost when the adapter reboots).
-    } else {
-      link.setSessionOverride(0, 0, 0, 0);
-      session.set('sess', sig);
-      if (state.pixel === 0) setPixel(3);                        // preset 0 has no button; back to Auto
-      else if (userAction && state.link >= 1) setTimeout(reload, 400);
+    link.setSessionOverride(ss.w, ss.h, ss.mmw, ss.mmh);
+    if (store.get('sessAuto', false)) {
+      // Auto flow: every hello restarts the session (and the iPhone's Bluetooth PAN with it);
+      // a changed override needs a reload to get one.
+      if (state.pixel !== 3) { setPixel(3); session.set('sess', sig); }
+      else if (session.get('sess') !== sig) { session.set('sess', sig); if (state.link >= 1 || userAction) restartSession(); }
+    } else if (state.pixel === 3) {
+      // Leave Auto. In Auto every hello — reconnect, reload, a second page — restarts the
+      // CarPlay session. With a fixed preset it restarts only when asked, and the override
+      // keeps its size; the change itself restarts the session once, override in place.
+      setPixel(0);
+    } else if (userAction && changed) {
+      restartSession();
     }
+    // Otherwise nothing: verifySession() restarts only if the picture that arrives has
+    // another size than requested (the override is lost when the adapter reboots).
   }
 
   /** Called with the size of the picture that actually arrives. */
@@ -697,23 +738,79 @@
 
   function updateBase() { return CONFIG.UPDATE_BASE_URL; }
 
+  // Versions compare by their date part (YYMMDDNN): appver "26101727.1508.1", tsl "26101727.5.4".
+  function verNum(s) { return parseInt(String(s || '').substring(0, 8), 10) || 0; }
+
+  // version.json -> the newer release, or null when this adapter is up to date
+  function fetchUpdate() {
+    return fetch(updateBase() + '/' + state.lyver + '/version.json?rand=' + Math.random(), { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('version.json ' + r.status); return r.json(); })
+      .then(function (j) {
+        var cur = verNum(state.init ? state.init.SW : '');
+        return j.url && cur && verNum(j.tsl || j.appver) > cur ? j : null;
+      });
+  }
+
+  // What changed since the running version: version.json lists the recent releases in
+  // "history" (newest first, notes per language); files from older releases only have "msg".
+  function releaseNotes(j) {
+    var cur = verNum(state.init ? state.init.SW : ''), lang = I18N.current;
+    var list = (j.history || []).filter(function (e) { return verNum(e.v) > cur; }).slice(0, 6);
+    if (!list.length) list = [{ v: j.tsl || j.appver, notes: j.notes, msg: j.msg }];
+    return list.map(function (e) {
+      var n = e.notes || {};
+      return { v: verNum(e.v), text: n[lang] || n[lang.split('-')[0]] || n.en || e.msg || '' };
+    });
+  }
+
+  function showUpdate(j) {
+    var v = verNum(j.tsl || j.appver);
+    state.updateUrl = j.url;
+    var box = document.createElement('div');
+    var p = document.createElement('div'); p.className = 'dialog-text';
+    p.textContent = t('about.new_version_v', { v: v, cur: verNum(state.init && state.init.SW) });
+    box.appendChild(p);
+    var notes = document.createElement('div'); notes.className = 'notes';
+    releaseNotes(j).forEach(function (e) {
+      var h = document.createElement('div'); h.className = 'notes-v'; h.textContent = String(e.v); notes.appendChild(h);
+      var b = document.createElement('div'); b.className = 'notes-text'; b.textContent = e.text || t('about.notes_none'); notes.appendChild(b);
+    });
+    box.appendChild(notes);
+    var hint = document.createElement('p'); hint.className = 'muted small'; hint.textContent = t('about.update_hint');
+    box.appendChild(hint);
+    dialog({ title: t('about.update'), content: box,
+      buttons: [{ label: t('about.later') },
+        { label: t('about.update_now'), primary: true, onClick: function () { if (!requireLink()) return; logEvent('update', 'start ' + v); startUpdate(); } }] });
+  }
+
   function checkUpdate() {
     if (!requireLink()) return;
     var btn = $('btn-update'); btn.disabled = true;
-    fetch(updateBase() + '/' + state.lyver + '/version.json?rand=' + Math.random(), { cache: 'no-store' })
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        var cur = state.init ? state.init.SW : '';
-        if (j.tsl && j.tsl > cur) {
-          state.updateUrl = j.url;
-          dialog({ title: t('about.new_version'), text: (j.tsl || '') + '\n' + (j.msg || ''),
-            buttons: [{ label: t('dlg.cancel') }, { label: t('dlg.ok'), primary: true, onClick: startUpdate }] });
-        } else {
-          dialog({ text: t('about.latest') });
-        }
-      })
-      .catch(function () { dialog({ text: t('about.update_fail') }); })
+    fetchUpdate()
+      .then(function (j) { setUpdateAvail(j); if (j) showUpdate(j); else dialog({ text: t('about.latest') }); })
+      .catch(function () { dialog({ text: t('about.check_fail') }); })
       .then(function () { btn.disabled = false; });
+  }
+
+  // Background check shortly after the page connects, then every UPDATE_CHECK_MS. A newer
+  // release only shows a banner on the home screen; installing stays the user's choice.
+  var updateTimer = null;
+  function scheduleUpdateCheck() {
+    if (updateTimer || !state.init || /test/.test(state.init.SW || '')) return;
+    updateTimer = setTimeout(function run() {
+      updateTimer = setTimeout(run, CONFIG.UPDATE_CHECK_MS);
+      if (state.updating) return;
+      fetchUpdate().then(setUpdateAvail).catch(function () { /* offline: next round */ });
+    }, CONFIG.UPDATE_FIRST_MS);
+  }
+
+  function setUpdateAvail(j) {
+    state.updateAvail = j || null;
+    var v = j ? verNum(j.tsl || j.appver) : 0;
+    $('home-update').classList.toggle('hidden', !j);
+    $('home-update-text').textContent = j ? t('home.update_avail', { v: v }) : '';
+    $('about-sw').textContent = ((state.init && state.init.SW) || '') + (j ? ' · ' + t('about.new_short', { v: v }) : '');
+    if (j && !state.updateLogged) { state.updateLogged = true; logEvent('update', 'available ' + v); }
   }
 
   var progressBar = null, progressText = null;
@@ -788,8 +885,26 @@
 
   /* ---------------------------------------------------------- init JSON */
 
+  // tools/build.sh stamps the firmware version into index.html. After a firmware update the car
+  // browser can keep running the previous page (it only reconnects its WebSocket), so a page
+  // whose stamp differs from the adapter's version loads the new one, once per version.
+  var BUILD = (function () {
+    var m = document.querySelector('meta[name="t2c-build"]'), v = m ? m.getAttribute('content') : '';
+    return /^\d{8}\./.test(v) ? v : '';
+  })();
+  function reloadIfStale(sw) {
+    if (!BUILD || !sw || sw === BUILD) return;
+    try {
+      if (sessionStorage.getItem('t2c.staleFor') === sw) return;
+      sessionStorage.setItem('t2c.staleFor', sw);
+    } catch (e) { return; }
+    logEvent('stale page', BUILD + ' -> ' + sw);
+    reload();
+  }
+
   function onInit(j) {
     state.init = j;
+    reloadIfStale(j.SW);
     state.lyver = (j.LY || '').split('.')[1] || '';
     state.channel = j.ch; state.chtmp = j.sh;
     state.pixel = j.pixel;
@@ -814,7 +929,6 @@
     segSet('seg-night', j.night > 2 ? j.night - 3 : j.night);
     $('online').checked = !!j.online;
     $('btnet').checked = !!j.btnet;
-    segSet('seg-pixel', j.pixel);
     segSet('seg-driver', j.driver);
     segSet('seg-fps', j.fps);
     // The adapter ships with the car name "Auto"; the car's own app is presented as Carlinkit.
@@ -830,6 +944,8 @@
     $('about-uuid').textContent = j.wifi || '';
     $('home-foot').textContent = (j.ssid ? j.ssid + ' · ' : '') + (j.SW || '');
     if (/test/.test(j.SW || '')) $('row-update').classList.add('hidden');
+    setUpdateAvail(state.updateAvail);
+    scheduleUpdateCheck();
     $('backlist').classList.toggle('hidden', j.bl !== 1);
 
     scheduleNightTick();
@@ -958,6 +1074,7 @@
     if (state.page === 'devices') updateBtList();
     applySession(false);
     if (state.init) updateCell({ apn: state.lastApn, csq: state.lastCsq, sig: state.lastSig });
+    if (state.init) setUpdateAvail(state.updateAvail);
   }
 
   /* -------------------------------------------------------------- touch */
@@ -1053,12 +1170,7 @@
       state.isNight = 2; scheduleNightTick();
     });
     segBind('seg-theme', function (v) { prefs.theme = v; store.set('theme', v); applyTheme(); });
-    segBind('seg-res', function (v) { prefs.res = v; store.set('res', v); store.set('sessAuto', false); applySession(true); });
-    segBind('seg-pixel', function (v) {
-      if (!requireLink()) return false;
-      state.pixel = +v; link.setKey(KEY.PIXEL, +v); session.set('sess', sessionSignature(null));
-    });
-    segBind('seg-uiscale', function (v) { prefs.uiScale = v; store.set('uiScale', v); store.set('sessAuto', false); applySession(true); });
+    segBind('seg-quality', function (v) { prefs.quality = v; store.set('quality', v); store.set('sessAuto', false); logEvent('quality', v); applySession(true); });
     segBind('seg-fps', function (v) { if (!requireLink()) return false; state.fps = +v; logEvent('fps', v); link.setKey(KEY.FPS, +v); });
     segBind('seg-fit', function (v) { prefs.fit = v; store.set('fit', v); presenter.setFit(v); });
     segBind('seg-mode', function (v) {
@@ -1090,6 +1202,7 @@
     $('btn-channel').onclick = channelDialog;
 
     $('btn-update').onclick = checkUpdate;
+    $('home-update').onclick = function () { if (state.updateAvail && requireLink()) showUpdate(state.updateAvail); };
     try { localStorage.removeItem('t2c.updateUrl'); } catch (e) { /* older builds stored a server override */ }
     $('usb-sw').onchange = function () { logEvent('usb', this.checked ? 'on' : 'off'); link.cmd(this.checked ? CMD.USB_ON : CMD.USB_OFF); };
     $('btn-reboot').onclick = function () {
@@ -1112,7 +1225,7 @@
         if (Math.abs(window.innerWidth - h.w) < CONFIG.RESIZE_RELOAD_PX && Math.abs(window.innerHeight - h.h) < CONFIG.RESIZE_RELOAD_PX) return;
         // The layout follows the viewport on its own; only the CarPlay session size depends on
         // it. The Auto flows carry that size in the hello, so they still reload.
-        if (prefs.res === 'device' || store.get('sessAuto', false)) { reload(); return; }
+        if (store.get('sessAuto', false)) { reload(); return; }
         h.w = window.innerWidth; h.h = window.innerHeight;
         applySession(true);
       }, 1000);
@@ -1127,7 +1240,7 @@
   function boot() {
     I18N.init();
     applyTheme();
-    segSet('seg-theme', prefs.theme); segSet('seg-res', prefs.res); segSet('seg-uiscale', prefs.uiScale); segSet('seg-fit', prefs.fit);
+    segSet('seg-theme', prefs.theme); segSet('seg-quality', prefs.quality); segSet('seg-fit', prefs.fit);
     segSet('seg-mode', prefs.transport);
     $('stats').checked = !!prefs.stats;
 
@@ -1146,7 +1259,7 @@
           logEvent('decoder-loading', 'attempt ' + a + ' ' + (b || ''));
           $('stage-msg').textContent = t('video.loading'); $('stage-msg').classList.remove('hidden');
         }
-        else if (kind === 'slow') h264Failed('slow');
+        else if (kind === 'slow') videoSlow();
         else if (kind === 'h264error') h264Failed(a, b);
       }
     });
@@ -1156,6 +1269,7 @@
     renderLanguages();
     renderHomeStatus();
     applySession(false);
+    setInterval(reportVideo, REPORT_EVERY);
 
     link.on('init', onInit)
       .on('link', onLinkMsg)

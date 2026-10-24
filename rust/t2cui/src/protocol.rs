@@ -29,6 +29,8 @@ pub enum ClientMsg {
     BtDisconnect(String),
     BtForget(String),
     WifiPsk(String),
+    /// type 14: one UTF-8 log line from the page (decoder warnings, stats, link events)
+    PageLog(String),
     Unknown(u16, usize),
 }
 
@@ -112,8 +114,21 @@ pub fn parse(data: &[u8]) -> Option<ClientMsg> {
         5 => ClientMsg::BtDisconnect(cstr(p).0),
         6 => ClientMsg::BtForget(cstr(p).0),
         9 => ClientMsg::WifiPsk(cstr(p).0),
+        14 => ClientMsg::PageLog(page_line(p)),
         t => ClientMsg::Unknown(t, p.len()),
     })
+}
+
+/// A page log line as it goes into the adapter log: one line, printable, at most PAGE_LINE_MAX chars.
+pub const PAGE_LINE_MAX: usize = 240;
+fn page_line(p: &[u8]) -> String {
+    String::from_utf8_lossy(p)
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .take(PAGE_LINE_MAX)
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
 /// `Uint32 [length, type]` + payload.
@@ -226,6 +241,19 @@ mod tests {
         assert_eq!(parse(&touch), Some(ClientMsg::Touch { m: 0, x: 500, y: 600 }));
         let ping = [0x04u8, 0x00, 0x0c, 0x00, 7, 0, 0, 0];
         assert_eq!(parse(&ping), Some(ClientMsg::Ping(7)));
+    }
+    #[test]
+    fn parse_page_log() {
+        let text = "slow ultra 1360x1088\nbacklog 17 화질";
+        let mut m = (text.len() as u16).to_le_bytes().to_vec();
+        m.extend_from_slice(&14u16.to_le_bytes());
+        m.extend_from_slice(text.as_bytes());
+        assert_eq!(parse(&m), Some(ClientMsg::PageLog("slow ultra 1360x1088 backlog 17 화질".into())));
+        let long = "x".repeat(1000);
+        let mut m = (long.len() as u16).to_le_bytes().to_vec();
+        m.extend_from_slice(&14u16.to_le_bytes());
+        m.extend_from_slice(long.as_bytes());
+        assert_eq!(parse(&m), Some(ClientMsg::PageLog("x".repeat(PAGE_LINE_MAX))));
     }
     #[test]
     fn video_split() {

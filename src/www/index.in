@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
+<meta name="t2c-build" content="@T2C_BUILD@">
 <script src="js/boot.js"></script>
 <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -75,6 +76,7 @@
           <span class="dot" id="home-dot"></span>
           <span id="home-status-text" data-i18n="home.waiting"></span>
         </div>
+        <button class="update-banner hidden" id="home-update" type="button"><span class="dot on"></span><span id="home-update-text"></span><span class="update-banner-go" data-i18n="home.update_view"></span></button>
         <div class="hero-top">
           <button class="btn btn-primary btn-xl" id="btn-open-carplay" data-i18n="home.open_carplay" hidden></button>
         </div>
@@ -211,28 +213,12 @@
       <div class="group">
         <div class="row">
           <div class="row-main"><div class="row-title" data-i18n="disp.res"></div><div class="row-hint" data-i18n="disp.res_hint"></div></div>
-          <div class="seg" id="seg-res">
-            <button data-v="sharp" data-i18n="disp.res_sharp"></button>
-            <button data-v="balanced" data-i18n="disp.res_balanced"></button>
-            <button data-v="saver" data-i18n="disp.res_saver"></button>
-            <button data-v="low" data-i18n="disp.res_low"></button>
-            <button data-v="device" data-i18n="disp.res_device"></button>
-          </div>
-        </div>
-        <div class="row hidden" id="row-pixel">
-          <div class="row-main"><div class="row-title" data-i18n="disp.res_device"></div></div>
-          <div class="seg" id="seg-pixel">
-            <button data-v="1" data-i18n="disp.res_hd"></button>
-            <button data-v="2" data-i18n="disp.res_sd"></button>
-            <button data-v="3" data-i18n="disp.res_auto"></button>
-          </div>
-        </div>
-        <div class="row" id="row-uiscale">
-          <div class="row-main"><div class="row-title" data-i18n="disp.ui_scale"></div><div class="row-hint" data-i18n="disp.ui_hint"></div></div>
-          <div class="seg" id="seg-uiscale">
-            <button data-v="small" data-i18n="disp.ui_small"></button>
-            <button data-v="normal" data-i18n="disp.ui_normal"></button>
-            <button data-v="large" data-i18n="disp.ui_large"></button>
+          <div class="seg" id="seg-quality">
+            <button data-v="ultra" data-i18n="disp.q_ultra"></button>
+            <button data-v="high" data-i18n="disp.q_high"></button>
+            <button data-v="balanced" data-i18n="disp.q_balanced"></button>
+            <button data-v="low" data-i18n="disp.q_low"></button>
+            <button data-v="ultralow" data-i18n="disp.q_ultralow"></button>
           </div>
         </div>
         <div class="row">

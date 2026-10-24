@@ -12,8 +12,8 @@
  *         decoded (a skipped one breaks the reference chain until the next IDR, and the
  *         iPhone sends those rarely); when several are waiting, only the newest is
  *         drawn, so a burst costs decode time but no latency. If the backlog keeps
- *         growing the decoder cannot keep up: 'slow' is reported and the app falls
- *         back to MJPEG.
+ *         growing the decoder cannot keep up: 'slow' is reported and the app tells the
+ *         driver (it never changes the picture size or the transport by itself).
  *
  * Canvas backing stores always have the frame's own size; CSS object-fit does the
  * scaling. Touch coordinates are mapped back through the same fit rule.
@@ -46,7 +46,10 @@
     this.broken = false;          // the worker failed for a reason that will not go away (no WebAssembly SIMD, no WebGL …)
     this.loading = false;         // the worker is still fetching its module (network)
     this.slowSeconds = 0;
+    this.prevQueue = 0;           // H.264: backlog at the previous stats report
+    this.gaveUp = false;          // H.264: the backlog was thrown away since the previous stats report
     this.rxSec = 0;               // H.264 frames received since the worker's last stats report
+    this.rep = this.resetReport(); // H.264: totals for the app's periodic report to the adapter log
     this.showStats = false;
     this.stats = this.resetStats();
     this.statsTimer = 0;
@@ -72,6 +75,20 @@
 
   VideoPresenter.prototype.resetStats = function () {
     return { rx: 0, painted: 0, dropped: 0, skipped: 0, bytes: 0, decodeMs: 0, decodeN: 0, t0: now(), fps: 0, rxfps: 0, kbps: 0, dec: 0 };
+  };
+
+  VideoPresenter.prototype.resetReport = function () {
+    return { t0: now(), rx: 0, dec: 0, ms: 0, qmax: 0, behind: 0, dropped: 0, slow: 0 };
+  };
+
+  /** Totals since the previous call (H.264 only): frames received / decoded, decode time, worst
+   *  backlog, seconds behind, frames thrown away, 'slow' verdicts. */
+  VideoPresenter.prototype.takeReport = function () {
+    var r = this.rep;
+    r.secs = (now() - r.t0) / 1000;
+    r.w = this.frameW; r.h = this.frameH; r.mode = this.mode;
+    this.rep = this.resetReport();
+    return r;
   };
 
   VideoPresenter.prototype.setFit = function (fit) {
@@ -257,7 +274,7 @@
     var self = this;
     this.stop();
     this.mode = 'h264';
-    this.slowSeconds = 0; this.rxSec = 0;
+    this.slowSeconds = 0; this.rxSec = 0; this.prevQueue = 0; this.gaveUp = false;
     this.showSurface('worker');
     if (this.worker) { this.worker.postMessage({ id: 'clear' }); return; }
     this.spawnWorker();
@@ -312,15 +329,24 @@
       case 'refresh': this.onMessage('refresh'); break;
       case 'error': this.workerGone(d.message, !!d.transient); break;
       case 'stats': {
-        if (this.mode !== 'h264' || !this.workerReady || this.paused) { this.rxSec = 0; this.slowSeconds = 0; break; }
+        if (this.mode !== 'h264' || !this.workerReady || this.paused) { this.rxSec = 0; this.slowSeconds = 0; this.prevQueue = 0; this.gaveUp = false; break; }
         this.stats.painted += d.dec; this.stats.decodeMs += d.ms; this.stats.decodeN += d.dec;
-        // Decoder cannot keep up: more than 40 % of the frames it was offered went undecoded
-        // for 5 s. Frames skipped while waiting for a key frame are the stream's fault, not
-        // the decoder's, and do not count.
+        this.rep.dec += d.dec; this.rep.ms += d.ms;
+        // Decoder cannot keep up: more than 40 % of the frames it was offered went undecoded,
+        // or a backlog that does not shrink, for 5 s in a row. Frames skipped while waiting for
+        // a key frame are the stream's fault, not the decoder's, and do not count. A backlog
+        // that is going down is a burst — the iPhone's Wi-Fi stalled for a moment and the
+        // frames arrived together (adapter log: lylinkapp "Late frame" up to 2 s) — and the
+        // decoder is catching up with it.
         var offered = this.rxSec - d.wait;
         this.rxSec = 0;
-        var behind = this.queue.length > VideoPresenter.H264_LATE;
-        if (behind || (offered >= 12 && d.dec < offered * 0.6)) { if (++this.slowSeconds >= 5) { this.slowSeconds = 0; this.onMessage('slow'); } }
+        var q = this.queue.length;
+        var behind = this.gaveUp || (q > VideoPresenter.H264_LATE && q >= this.prevQueue);
+        if (q > VideoPresenter.H264_LATE || this.gaveUp) this.rep.behind++;
+        this.prevQueue = q; this.gaveUp = false;
+        if (behind || (offered >= 12 && d.dec < offered * 0.6)) {
+          if (++this.slowSeconds >= 5) { this.slowSeconds = 0; this.rep.slow++; this.onMessage('slow'); }
+        }
         else this.slowSeconds = 0;
         break;
       }
@@ -329,7 +355,7 @@
 
   /* Backlog that means the decoder is hopelessly behind (3 s at 30 fps): the queue is thrown
    * away so memory stays bounded; the picture is broken until an IDR anyway and the 'slow'
-   * verdict follows. A backlog above H264_LATE for 5 s counts as slow as well. */
+   * verdict follows. A backlog above H264_LATE that does not shrink for 5 s counts as slow. */
   VideoPresenter.H264_GIVEUP = 90;
   VideoPresenter.H264_LATE = 15;
 
@@ -343,8 +369,11 @@
     if (!this.workerReady) return;
     this.stats.rx++; this.stats.bytes += u8.byteLength; this.rxSec++;
     this.queue.push(u8);
+    this.rep.rx++;
+    if (this.queue.length > this.rep.qmax) this.rep.qmax = this.queue.length;
     if (this.queue.length > VideoPresenter.H264_GIVEUP) {
-      this.stats.dropped += this.queue.length; this.queue = []; this.lost = true;
+      this.stats.dropped += this.queue.length; this.rep.dropped += this.queue.length; this.queue = []; this.lost = true;
+      this.gaveUp = true;
       this.onMessage('refresh');
     }
     this.postNext();
