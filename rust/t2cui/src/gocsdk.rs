@@ -4,8 +4,8 @@
 //!
 //!   -> AT#P0            at open (enable reports); AT#P1 after an `IS1` line
 //!   <- IS0 / IS1 / IS2  Bluetooth link state: none / connecting / connected
-//!   <- NC               PAN up: run `udhcpc -R -n -b -i bt-pan`, enable ip_forward, flush and
-//!                       re-create the nat MASQUERADE out of bt-pan (t2cd re-adds its REDIRECT)
+//!   <- NC               PAN up: run `udhcpc -R -n -b -i bt-pan`, enable ip_forward, re-create
+//!                       the nat MASQUERADE out of bt-pan (no nat flush: t2cd's REDIRECT stays)
 //!   <- ND               PAN "already connected"
 //!   -> AT#NC<mac>       ask for the PAN when the phone is connected but no NC came (every 10 s)
 //!   <- MX<flag><mac><name>  paired-device report: must be answered with AT#MH or gocsdk repeats
@@ -367,14 +367,18 @@ impl Gocsdk {
     }
 }
 
-/// Stock `btpan_ipForward`, verbatim: DHCP on bt-pan, forwarding, nat out of bt-pan. The nat
-/// flush drops t2cd's udp/53 REDIRECT too; its keeper puts it back within 20 s.
+/// Stock `btpan_ipForward`: DHCP on bt-pan, forwarding, nat out of bt-pan. Stock flushes the
+/// whole nat table first, which also drops t2cd's udp/53 REDIRECT until its keeper puts it back
+/// (up to 20 s with nothing answering the car's DNS -- enough for the car's connectivity check
+/// to fail and move its default route to LTE, where the UI's names do not resolve). Since
+/// 26101729 only our own MASQUERADE rule is replaced.
 pub fn pan_ip_forward() -> std::io::Result<()> {
     for cmd in [
         "killall udhcpc",
         "udhcpc -R -n -b -i bt-pan",
         "iptables -F",
-        "iptables -t nat -F",
+        "iptables -t nat -D POSTROUTING -o bt-pan -j MASQUERADE",
+        "iptables -t nat -D POSTROUTING -o bt-pan -j MASQUERADE",
         "iptables -P INPUT ACCEPT",
         "iptables -P FORWARD ACCEPT",
         "iptables -t nat -A POSTROUTING -o bt-pan -j MASQUERADE",

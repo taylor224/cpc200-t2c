@@ -40,6 +40,12 @@
 #     cycle: uptime, MemAvailable, load, SoC temperature, process ids, associated stations, wlan0 and
 #     bt-pan byte counters, OOM kills seen in dmesg, SDIO (irq 305) / BT UART (irq 295) interrupt
 #     counters, the last TSF probe.
+#   * the last 14 KB of /tmp/t2cui.log (sessions, phone link, page events and video stats) and the
+#     last 20 health lines to /mnt/UDISK/t2c_ui_saved.log: every 2 minutes when it changed, and on
+#     the next tick (15 s) after a drop line (link 0, phone false, page gone, session restart), with
+#     the CarPlay-session lines of logcat (teardown reasons) appended. At start the previous boot's
+#     copy moves to t2c_ui_saved.prev.log (diagnostics "t2cui_prev"): a car usually cuts the
+#     adapter's power before anyone can read /tmp, and that is what explains a drop.
 # Its own actions go to /tmp/t2c_watchdog.log. Phone page: diagnostics "health", "health_saved",
 # "watchdog". Never killall/pidof "hostapd" here (the wrapper script shares that comm name).
 BT_NAME=$1
@@ -47,6 +53,7 @@ HERE=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
 LOG=/tmp/t2c_watchdog.log
 HEALTH=/tmp/t2c_health.log
 SAVED=/mnt/UDISK/t2c_health.log
+UISAVED=/mnt/UDISK/t2c_ui_saved.log   # + .prev = the previous boot
 OFF=/mnt/UDISK/t2c_watchdog_off
 STA=/proc/net/rtl8821cs/wlan0/all_sta_info
 CONF=/tmp/hostapd.conf
@@ -204,10 +211,44 @@ health() {
 	fi
 }
 
+ui_saved_sz=''; ui_drop_sz=0
+DROPTAIL=/tmp/t2c_drop_tail   # the logcat/t2cd lines taken at the last drop; copied into every later save
+# $1 = drop: first refresh $DROPTAIL (why the phone's session ended: CarPlay teardown lines, station
+# join/leave lines, the DNS forwarder's tail). Every save, plain or drop, carries that file, so the
+# plain 2-minute save after a drop (the log keeps growing: reconnects, pages) does not erase it; the
+# next drop replaces it. A brace group's status is its last command's: end in one that succeeds.
+save_ui_log() {
+	if [ -n "$1" ]; then
+		{
+			echo "--- logcat (CarPlay session) at up=$(cut -d' ' -f1 /proc/uptime 2>/dev/null)"
+			logcat -d -v threadtime 2>/dev/null | grep -E 'Teardown|TimeoutErr|NotFoundErr|Sender idle|Idle timeout|NetworkChange|Removing CarPlayController|CPClientConnect|CPClientDisconnect|add_device|del_device|OnNotifyWifi|AP-STA|disassoc|deauth' | grep -v 'psk:' | tail -n 40 | cut -c 1-200
+			echo "--- t2cd (last 30: upstream state, SERVFAILs)"; tail -n 30 /tmp/t2cd.log 2>/dev/null || :
+		} > "$DROPTAIL.tmp" 2>/dev/null && mv "$DROPTAIL.tmp" "$DROPTAIL"
+	fi
+	sz=$(wc -c < /tmp/t2cui.log 2>/dev/null | tr -d ' ')
+	[ -n "$sz" ] && [ "$sz" != "$ui_saved_sz" ] || return 0
+	ui_saved_sz=$sz
+	{
+		tail -c 14336 /tmp/t2cui.log
+		echo "--- health (last 20 min)"; tail -n 20 "$HEALTH"
+		cat "$DROPTAIL" 2>/dev/null || :
+	} > "$UISAVED.tmp" 2>/dev/null && mv "$UISAVED.tmp" "$UISAVED"
+}
+# a drop line appeared in the UI log since the last look: save at once instead of in up to 2 min
+ui_drop_seen() {
+	sz=$(wc -c < /tmp/t2cui.log 2>/dev/null | tr -d ' ')
+	case "$sz" in ''|*[!0-9]*) return 1 ;; esac
+	[ "$sz" -gt "$ui_drop_sz" ] || { ui_drop_sz=$sz; return 1; }
+	n=$((sz - ui_drop_sz)); ui_drop_sz=$sz
+	tail -c "$n" /tmp/t2cui.log 2>/dev/null | grep -qE '"link": 0|phone false|page #[0-9]+ gone|session restart|session stop|t2cui start'
+}
+
 goc_miss=0; hap_miss=0; goc_n=0; goc_win=0; hap_n=0; hap_win=0; tick=0; lines=0; dns_miss=0; dns_n=0; dns_win=0; ui_miss=0; ui_n=0; ui_win=0; ui_fallback=''; ap_miss=0; ap_n=0
 crash_reset=0
 log "start bt_name=$BT_NAME dir=$HERE"
 echo 20 > /proc/sys/kernel/panic 2>/dev/null
+# keep the previous boot's UI log: this boot overwrites t2c_ui_saved.log within 2 minutes
+[ -s "$UISAVED" ] && mv "$UISAVED" "$UISAVED.prev" 2>/dev/null
 while :; do
 	sleep $PERIOD
 	tick=$((tick + 1))
@@ -290,6 +331,7 @@ while :; do
 	fi
 	[ $((tick % 2)) -eq 0 ] && radio_check
 	[ $((tick % 4)) -eq 0 ] && health
+	if ui_drop_seen; then save_ui_log drop; elif [ $((tick % 8)) -eq 0 ]; then save_ui_log; fi
 	if [ $crash_reset -eq 0 ] && [ "$now" -ge 1800 ]; then
 		crash_reset=1
 		c=$(cat "$CRASHCOUNT" 2>/dev/null); case "$c" in ''|0) ;; *) echo 0 > "$CRASHCOUNT" 2>/dev/null; log "30 min up: auto-reboot count reset" ;; esac

@@ -1,6 +1,6 @@
-//! Keeps the nat rule that sends the car's DNS to the forwarder. lylinkapp flushes the nat table
-//! (`iptables -t nat -F`) whenever the Bluetooth PAN comes up, so the rule is checked every
-//! 20 s and put back. Every iptables call runs with the xtables lock wait (`-w 2`, when this
+//! Keeps the nat rule that sends the car's DNS to the forwarder. The vendor UI flushes the nat
+//! table (`iptables -t nat -F`) whenever the Bluetooth PAN comes up (t2cui stopped doing that in
+//! 26101729), so the rule is checked every 20 s and put back. Every iptables call runs with the xtables lock wait (`-w 2`, when this
 //! iptables knows the option) and a 5 s kill timeout, so a stuck iptables can never stall the
 //! keeper. Only an error that names the target/match as missing marks the kernel as
 //! unsupported; everything else is retried.

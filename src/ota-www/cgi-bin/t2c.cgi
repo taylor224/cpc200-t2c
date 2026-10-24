@@ -224,6 +224,8 @@ cat)
     watchdog)        f=/tmp/t2c_watchdog.log ;;
     crash)           f=/mnt/UDISK/t2c_crash.log ;;
     t2cui)           f=/tmp/t2cui.log ;;
+    t2cui_saved)     f=/mnt/UDISK/t2c_ui_saved.log ;;
+    t2cui_prev)      f=/mnt/UDISK/t2c_ui_saved.log.prev ;;
     t2cd_log)        f=/tmp/t2cd.log ;;
     t2cd)            cmd='for b in /tmp/t2cd /mnt/customer/app/t2cd; do [ -e "$b" ] && ls -la "$b"; done; p=$(pidof t2cd); echo "running: $p"; for q in $p; do grep -E "^(VmRSS|VmSize|Threads)" /proc/$q/status 2>/dev/null; done; iptables -t nat -S PREROUTING 2>&1 | grep -i redirect; echo "udp listeners:"; awk "NR>1 && \$4==\"07\" {print \$2}" /proc/net/udp 2>/dev/null; echo "tcp listeners:"; awk "NR>1 && \$4==\"0A\" {print \$2}" /proc/net/tcp 2>/dev/null; [ -f /mnt/UDISK/t2c_shell ] && echo "shell flag: set"' ;;
     iptables)        cmd='echo "## nat"; iptables -t nat -S 2>&1; echo "## filter"; iptables -S 2>&1; echo "## string match:"; iptables -m string -h 2>&1 | grep -c -E "algo|from|to" ; echo "## wlan0 addresses"; ifconfig wlan0 2>&1 | grep inet; ifconfig wlan0:0 2>&1 | grep inet' ;;
